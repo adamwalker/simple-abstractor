@@ -150,7 +150,7 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
         abs2 lv rv 
             | fst lres == fst rres = abs2 lv rv
-            | otherwise            = Mu () $ Quant Exists (map predToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret]
+            | otherwise            = Mu () $ Quant Exists (map predToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
             where
             getRet var = fromJustNote "getIdent" $ Map.lookup var theMap
             labs1ret = abs1Ret (snd lres) lv
@@ -158,4 +158,11 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
             lres = getRet lv
             rres = getRet rv
+            thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()) . uncurry func . ((getPred &&& id) *** (getPred &&& id)))) cartProd
+                where
+                cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
+                func (Left (l1, r1), l)  (Left (l2, r2), r)  = [predToTerm $ constructVarPred r1 r2, predToTerm l, predToTerm r]
+                func (Left (l1, r1), l)  (Right (l2, r2), r) = [predToTerm $ constructConstPred r1 r2, predToTerm l, predToTerm r]
+                func (Right (l1, r1), l) (Left (l2, r2), r)  = [predToTerm $ constructConstPred r2 r1, predToTerm l, predToTerm r]
+                func (Right (l1, r1), l) (Right (l2, r2), r) = [TopBot (if' (r1==r2) Top Bot), predToTerm l, predToTerm r]
 
