@@ -9,7 +9,11 @@ module Predicate (
 data EqPred where
     EqVar   :: String -> String -> EqPred
     EqConst :: String -> Int    -> EqPred
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord)
+
+instance Show EqPred where
+    show (EqVar l r)   = l ++ "==" ++ r
+    show (EqConst l r) = l ++ "==" ++ show r
 
 constructVarPred :: String -> String -> EqPred
 constructVarPred x y

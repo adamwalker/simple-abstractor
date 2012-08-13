@@ -51,9 +51,9 @@ valExprToTSL absVar = valExprToTSL'
             where
             ccases = map (valExprToTSL' . snd) cases
             conds = map (binExpToTSL . fst) cases
-            allPreds = concat $ map snd ccases
+            allPreds = nub $ concat $ map snd ccases
             f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (allPreds \\ preds) ++ [tslcase]
-        valExprToTSL'' (IfV c t e)     = (TernOp (binExpToTSL c) tslT tslE, nub $ predsT ++ predsE)
+        valExprToTSL'' (IfV c t e)     = (TernOp (binExpToTSL c) tslT tslE, nub $ nub $ predsT ++ predsE)
             where 
             (tslT', predsT) = valExprToTSL' t 
             (tslE', predsE) = valExprToTSL' e
