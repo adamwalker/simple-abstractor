@@ -19,9 +19,10 @@ main = do
             let res = varsAssigned ress
             case res of
                 Left err -> print err
-                Right (vars, abs1) -> do
+                Right (Return vars abs1 abs2) -> do
                     print vars
                     putDoc $ prettyPrint $ abs1 "z"
+                    putDoc $ prettyPrint $ abs2 "z" "v"
     fres <- readFile "exampleval.tsl"
     let res =  parse valExpr "" fres
     case res of 
