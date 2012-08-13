@@ -21,7 +21,7 @@ main = do
                 Left err -> print err
                 Right (Return vars abs1 abs2) -> do
                     print vars
-                    putDoc $ prettyPrint $ abs1 "z"
+                    putDoc $ prettyPrint $ abs1Tsl $ abs1 "z"
                     putDoc $ prettyPrint $ abs2 "z" "v"
     fres <- readFile "exampleval.tsl"
     let res =  parse valExpr "" fres

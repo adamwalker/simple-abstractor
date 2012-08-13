@@ -36,8 +36,11 @@ predToString pred = predToString' val
     predToString' (Right (x, c)) = "\"" ++ x ++ "==" ++ show c ++ "\""
     val = getPred pred
 
+predToIdent :: EqPred -> Ident 
+predToIdent pred = Ident [(predToString pred)] False
+
 predToTerm :: EqPred -> AST a
-predToTerm pred = Term $ Ident [(predToString pred)] False
+predToTerm = Term . predToIdent
 
 valExprToTSL :: String -> ValExpr -> (Mu () AST, [EqPred])
 valExprToTSL absVar = valExprToTSL'
@@ -73,9 +76,14 @@ disjoint :: (Eq a) => [a] -> Bool
 disjoint (hd:rst) = not (hd `elem` rst) && disjoint rst
 disjoint []       = True
 
+data Abs1Return = Abs1Return {
+    abs1Tsl   :: Mu () AST,
+    abs1Preds :: [EqPred]
+}
+
 data Return = Return {
     varsRet :: [String],
-    abs1Ret :: String -> Mu () AST,
+    abs1Ret :: String -> Abs1Return,
     abs2Ret :: String -> String -> Mu () AST
 }
 
@@ -83,7 +91,7 @@ varsAssigned :: CtrlExpr -> Either String Return
 varsAssigned (Assign var valExp) = return $ Return [var] abs1 abs2
     where
     abs1 absVar 
-        | absVar == var = fst $ valExprToTSL var valExp
+        | absVar == var = uncurry Abs1Return $ valExprToTSL var valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
 varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
@@ -95,8 +103,12 @@ varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
         caseabs1s = map abs1Ret subcases
         caseabs2s = map abs2Ret subcases
         abs1 absVar 
-            | absVar `elem` hd = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) (map ($ absVar) caseabs1s)
+            | absVar `elem` hd = Abs1Return tsl preds 
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
+                where
+                abs1ress = map ($ absVar) caseabs1s
+                tsl   = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) $ map abs1Tsl abs1ress
+                preds = nub $ concat $ map abs1Preds abs1ress
         abs2 lv rv = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) (map (($ lv) >>> ($ rv)) caseabs2s)
 varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
     where
@@ -111,8 +123,12 @@ varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
         ta2 = abs2Ret rt
         ea2 = abs2Ret rt
         abs1 absVar
-            | absVar `elem` vt = Mu () $ TernOp (binExpToTSL c) (ta1 absVar) (ea1 absVar)
+            | absVar `elem` vt = Abs1Return tsl (nub $ abs1Preds abstres ++ abs1Preds abseres)
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in if"
+                where
+                abstres = ta1 absVar
+                abseres = ea1 absVar
+                tsl = Mu () $ TernOp (binExpToTSL c) (abs1Tsl abstres) (abs1Tsl abseres)
         abs2 lv rv = Mu () $ TernOp (binExpToTSL c) (ta2 lv rv) (ea2 lv rv)
 varsAssigned (Conj es) = join $ res <$> sequenceA rres
     where
@@ -134,9 +150,12 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
         abs2 lv rv 
             | fst lres == fst rres = abs2 lv rv
-            | otherwise            = Mu () $ Quant Exists [Ident ["somevars"] False] $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Ret (snd lres) lv, abs1Ret (snd rres) rv]
+            | otherwise            = Mu () $ Quant Exists (map predToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret]
             where
             getRet var = fromJustNote "getIdent" $ Map.lookup var theMap
+            labs1ret = abs1Ret (snd lres) lv
+            rabs1ret = abs1Ret (snd rres) rv
+            allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
             lres = getRet lv
             rres = getRet rv
 
