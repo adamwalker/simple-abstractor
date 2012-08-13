@@ -1,0 +1,174 @@
+CONJ /*x, y, z, t*/{
+    x := /*x*/ y; 
+    y := /*y*/ 5; 
+    z := /*z*/ case { 
+        x==2 : 5;
+        y==3 : 6;
+    };
+    case /*u, v*/ {
+        x==2 : CONJ /*u, v*/ {
+            u := 8;
+            v := 9;
+            /*
+                (u==v)' = (8==9)
+            */
+        };
+        y==2 : CONJ /*u, v*/ {
+            u := 8;
+            v := 9;
+        };
+    };
+    if /*t*/ (y==2){
+        t := 3
+    } else {
+        t := 4
+    };
+}
+
+/*
+
+example pred : u==v
+
+case {
+    p1 : p2;
+    p3 : p4;
+}
+
+p1 => (x==2)
+p2 => (z'==5)
+p3 => (y==3)
+p4 => (z'==6)
+
+get a list of (u' == x) predicates
+get a list of (v' == x) predicates
+(u == v)' = consider all pairs, make disjunction of p and (x==x), using refl and constant equality, substitute state vars if they exist
+but -- all pairs is retarded
+
+find lowest common ancestor
+
+u = case {
+    p : x
+    q : 8
+    }
+v = case {
+    r : y
+    s : 9
+    }
+
+=====>
+
+pred : u==v
+
+exists ("u'==x", "u'==8", "v'==y", "v'==9"){
+    CONJ {
+        case {
+            p : "u'==x";
+            q : "u'==8";
+        };
+        case {
+            r : "v'==y";
+            s : "v'==9";
+        };
+        ("u==v"' = "u'==x" && "v'==y" && "x==y"
+                | "u'==x" && "v'==y" && "x==9"
+                | "u'==8" && "v'==y" && "8==y"
+                | "u'==8" && "v'==9" && "8==9");
+    }
+}
+
+each case returns - skeleton tsl statement, a list of var'==x predicates
+
+new predicates are "x==y", "x==9", "8==y", "8==9"
+
+======================================================
+
+case {
+    c : u := x;
+    d : u := 8;
+};
+v = case {
+    r : y;
+    s : 9;
+}
+
+=====>
+
+same as before
+
+=======================================================
+
+case {
+    p: CONJ {
+        u = x;
+        v = 8;
+    };
+    q : CONJ {
+        u = y;
+        v = 9;
+    }
+}
+
+=====>
+
+case {
+    p : CONJ {
+        exists ("u'==x", "v'==8"){
+            CONJ {
+                "u'==x";
+                "v'==8";
+                "u==v"' = "u'==x" && "v'==8" && "x==8";
+            }
+        }
+    };
+    q : CONJ {
+    };
+}
+
+new predicates are "x==9", "y==9"
+
+
+abstracting (x==y)
+go down tree until a fork in CTRL statements where they are assigned
+common ctrl statement :
+    imput: (x, y)
+    output: (tsl fragment, new predicates
+after fork encountered: 
+    input: x
+    output: (tsl fragment that assigns temporary variables, temporary predicates)
+where fork encountered:
+    considers all pairs, generates new predicates
+
+case {
+    a : x=9;
+    c : x=u;
+}
+case {
+    d : y=9;
+    f : y=v;
+}
+
+consider: !a and !d
+
+"x'==9" and "y'==9" are undefined
+
+"x==y"' = some disjuncts | "x'==9" && "y'==9" && "9==9" -> "x==y"' becomes non-deterministically true. wrong
+
+x = case {
+    a : case {
+        c : v;
+        d : w;
+    }
+    b : u;
+}
+
+========>
+
+case {
+    a : case {
+        c : "x'==v"; !"x'==w"
+        d : "x'==w"; !"x'==v"
+    }; !"x'==u"
+    b : "x'==u"; !"x'==w"; !"x'==v"
+}
+
+*/
