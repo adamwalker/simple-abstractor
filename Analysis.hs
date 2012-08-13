@@ -1,3 +1,4 @@
+{-#LANGUAGE TupleSections #-}
 module Analysis where
 
 import Control.Applicative
@@ -7,6 +8,8 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.List
 import Control.Arrow
+
+import Safe
 
 import qualified SyntaxTree
 import SyntaxTree hiding (Not, Conj)
@@ -24,7 +27,7 @@ binExpToTSL = Mu () . binExpToTSL'
     binExpToTSL' FalseE          = TopBot Bot
     binExpToTSL' (Not x)         = UnOp SyntaxTree.Not (binExpToTSL x)
     binExpToTSL' (Bin op x y)    = BinOp (absBOpToTSLBOp op) (binExpToTSL x) (binExpToTSL y)
-    binExpToTSL' (Pred pred x y) = undefined
+    binExpToTSL' (Pred pred x y) = Term $ Ident ["Some pred in binExpToTSL"] False
 
 predToString :: EqPred -> String
 predToString pred = predToString' val
@@ -70,50 +73,49 @@ disjoint :: (Eq a) => [a] -> Bool
 disjoint (hd:rst) = not (hd `elem` rst) && disjoint rst
 disjoint []       = True
 
-varsAssigned :: CtrlExpr -> Either String [String]
-varsAssigned (Assign var _) = return [var]
-varsAssigned (CaseC cases)  = join $ res <$> sequenceA subvars
+varsAssigned :: CtrlExpr -> Either String ([String], String -> Mu () AST)
+varsAssigned (Assign var valExp) = return ([var], abs1)
     where
-    subvars = map (liftA sort . varsAssigned . snd) cases
-    res (hd:rst) = if' (and (map (==hd) rst)) (return hd) (throwError "Different vars assigned in case branches")
-varsAssigned (IfC _ et ee)  = join $ res <$> vt <*> ve 
+    abs1 absVar 
+        | absVar == var = fst $ valExprToTSL var valExp
+        | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
+varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
     where
-    vt = sort <$> varsAssigned et
-    ve = sort <$> varsAssigned ee
-    res vt ve = if' (vt==ve) (return vt) (throwError "Different vars assigned in if branches")
-varsAssigned (Conj es) = join $ res <$> sequenceA vars
-    where
-    vars = map varsAssigned es
-    res vars = if' (disjoint allVars) (return allVars) (throwError "Vars assigned in case statement are not disjoint")
+    subcases = map (varsAssigned . snd) cases
+    res subcases = if' (and (map (==hd) rst)) (return (hd, abs1)) (throwError "Different vars assigned in case branches")
         where
-        allVars = concat vars
-
-{-
-type Result = String
-
-doVal :: ValExpr -> Result
-doVal (StringLit str) = str
-doVal (IntLit    int) = show int
-
-prep :: [CtrlExpr] -> Map String CtrlExpr
-prep = undefined
-
-createTheMap :: [([String], CtrlExpr)] -> Map String CtrlExpr
-createTheMap = undefined
-
-abstract1 :: CtrlExpr -> String -> Result 
-abstract1 (Assign var valAss) varReq 
-    | var==valReq = var ++ "'==" ++ doVal valAss
-    | otherwise   = error $ "Invariant broken: " ++ var ++ " is not assigned here"
-abstract1 (CaseC cases) varReq = "case(){" ++ show procCases ++ "}"
+        (hd:rst)  = map (sort . fst) subcases
+        caseabs1s = map snd subcases
+        abs1 absVar 
+            | absVar `elem` hd = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) (map ($ absVar) caseabs1s)
+            | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
+varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
     where
-    procCases = map (abstract1 . snd) cases
-abstract1 (If c t e) varReq = "if(){" ++ show procT ++ "}{" ++ show procE ++ "}"
+    rt = varsAssigned et
+    re = varsAssigned ee
+    res rt re = if' (vt == ve) (return (vt, abs1)) (throwError "Different vars assigned in if branches")
+        where
+        vt  = sort $ fst rt
+        ve  = sort $ fst rt 
+        ta1 = snd rt
+        ea1 = snd rt
+        abs1 absVar
+            | absVar `elem` vt = Mu () $ TernOp (binExpToTSL c) (ta1 absVar) (ea1 absVar)
+            | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in if"
+varsAssigned (Conj es) = join $ res <$> sequenceA rres
     where
-    procT = abstract1 t varReq
-    procE = abstract1 e varReq
-abstract1 (Conj  conjs) varReq = abstract1 (fromJustNote ("Invariant broken: " ++  varReq ++ " is not assigned here") Map.lookup valReq) varReq
-    where
-    res = map (varsAssigned &&& id) conjs
-    theMap = createTheMap res
--}
+    rres = map varsAssigned es
+    res rres = if' (disjoint allVars) (return (allVars, abs1)) (throwError "Vars assigned in case statement are not disjoint")
+        where
+        varsAssigned = map fst rres
+        allVars  = concat varsAssigned
+        theMap = createTheMap $ zip varsAssigned (map snd rres)
+        createTheMap :: [([String], (String -> Mu () AST))] -> Map String (String -> Mu () AST)
+        createTheMap things = Map.unions $ map (uncurry f) things
+            where
+            f :: [String] -> (String -> Mu () AST) -> Map String (String -> Mu () AST)
+            f vars func = Map.fromList (map (,func) vars)
+        abs1 absVar
+            | absVar `elem` allVars = (fromJustNote "varsAssigned Conj" $ Map.lookup absVar theMap) absVar
+            | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
+

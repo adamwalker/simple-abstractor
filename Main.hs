@@ -1,5 +1,7 @@
 module Main where
 
+import Control.Monad
+
 import Text.PrettyPrint.Leijen.Text (putDoc)
 import Text.Parsec hiding ((<|>))
 
@@ -14,7 +16,12 @@ main = do
         Left err -> print err
         Right ress -> do
             print ress
-            print $ show $ varsAssigned ress
+            let res = varsAssigned ress
+            case res of
+                Left err -> print err
+                Right (vars, abs1) -> do
+                    print vars
+                    putDoc $ prettyPrint $ abs1 "z"
     fres <- readFile "exampleval.tsl"
     let res =  parse valExpr "" fres
     case res of 
