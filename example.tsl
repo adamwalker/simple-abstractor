@@ -3,7 +3,7 @@ CONJ /*x, y, z, t*/{
     y := /*y*/ 5; 
     z := /*z*/ case { 
         x==2 : 5;
-        y==3 : 6;
+        y==3 : y;
     };
     case /*u, v*/ {
         a : CONJ /*u, v*/ {

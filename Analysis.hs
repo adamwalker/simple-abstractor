@@ -7,6 +7,7 @@ import Control.Monad.Error
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.List
+import Data.Maybe
 import Control.Arrow
 
 import Safe
@@ -63,24 +64,34 @@ predToIdent pred = Ident [(predToString pred)] False
 predToTerm :: EqPred -> AST a
 predToTerm = Term . predToIdent
 
+nsPredToString :: NSEQPred -> String
+nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "==" ++ r ++ "\""
+nsPredToString (NsEqConst x c) = "\"" ++ x ++ "==" ++ show c ++ "\""
+
+nsPredToIdent :: NSEQPred -> Ident
+nsPredToIdent pred = Ident [(nsPredToString pred)] False
+
+nsPredToTerm :: NSEQPred -> AST a
+nsPredToTerm = Term . nsPredToIdent
+
 data ValExprToTSLRet = ValExprToTSLRet {
     valExpTSL   :: Mu () AST,
-    primedPreds :: [EqPred],
+    primedPreds :: [NSEQPred],
     newPreds    :: [EqPred]
 }
 
-uncurryValExpToTSLRet :: (Mu () AST -> [EqPred] -> [EqPred] -> a) -> ValExprToTSLRet -> a
+uncurryValExpToTSLRet :: (Mu () AST -> [NSEQPred] -> [EqPred] -> a) -> ValExprToTSLRet -> a
 uncurryValExpToTSLRet f (ValExprToTSLRet x y z) = f x y z
 
 valExprToTSL :: String -> ValExpr -> ValExprToTSLRet
 valExprToTSL absVar = valExprToTSL'
     where
-    valExprToTSL' (StringLit var) = ValExprToTSLRet (Mu () $ Term $ Ident [(predToString pred)] False) [pred] []
+    valExprToTSL' (StringLit var) = ValExprToTSLRet (Mu () $ nsPredToTerm pred) [pred] []
         where
-        pred = constructVarPred (absVar ++ "'") var
-    valExprToTSL' (IntLit int)    = ValExprToTSLRet (Mu () $ Term $ Ident [(predToString pred)] False) [pred] []
+        pred = NsEqVar absVar var
+    valExprToTSL' (IntLit int)    = ValExprToTSLRet (Mu () $ nsPredToTerm pred) [pred] []
         where
-        pred = constructConstPred (absVar ++ "'") int
+        pred = NsEqConst absVar int
     valExprToTSL' (CaseV cases)   = ValExprToTSLRet (Mu () $ SyntaxTree.Case $ zip conds (map (uncurry f) (zip (map valExpTSL ccases) (map primedPreds ccases)))) allPreds newPreds
         where
         ccases = map (valExprToTSL' . snd) cases
@@ -88,13 +99,14 @@ valExprToTSL absVar = valExprToTSL'
         conds  = map fst conds'
         newPreds = nub $ concat $ map snd conds'
         allPreds = nub $ concat $ map primedPreds ccases
-        f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (allPreds \\ preds) ++ [tslcase]
+        f :: Mu () AST -> [NSEQPred] -> Mu () AST
+        f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (allPreds \\ preds) ++ [tslcase]
     valExprToTSL' (IfV c t e)     = ValExprToTSLRet (Mu () $ TernOp (fst $ binExpToTSL c) tslT tslE) allPreds newPreds
         where 
         ValExprToTSLRet tslT' predsT newPredsT = valExprToTSL' t 
         ValExprToTSLRet tslE' predsE newPredsE = valExprToTSL' e
-        tslT = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (predsE \\ predsT) ++ [tslT']
-        tslE = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (predsT \\ predsE) ++ [tslE']
+        tslT = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (predsE \\ predsT) ++ [tslT']
+        tslE = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (predsT \\ predsE) ++ [tslE']
         allPreds = nub $ predsT ++ predsE 
         newPreds = nub $ newPredsT ++ newPredsE
 
@@ -110,7 +122,7 @@ disjoint []       = True
 
 data Abs1Return = Abs1Return {
     abs1Tsl       :: Mu () AST,
-    abs1Preds     :: [EqPred],
+    abs1Preds     :: [NSEQPred],
     abs1newPreds  :: [EqPred]
 }
 
@@ -201,20 +213,21 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             | fst lres == fst rres = abs2 lv rv
             | otherwise            = Abs2Return tsl newPreds
             where
-            tsl = Mu () $ Quant Exists (map predToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
+            tsl = Mu () $ Quant Exists (map nsPredToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
             getRet var = fromJustNote "getIdent" $ Map.lookup var theMap
             labs1ret = abs1Ret (snd lres) lv
             rabs1ret = abs1Ret (snd rres) rv
             allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
             lres = getRet lv
             rres = getRet rv
-            newPreds = abs1newPreds labs1ret ++ abs1newPreds rabs1ret
-            thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()) . uncurry func . ((getPred &&& id) *** (getPred &&& id)))) cartProd
+            newPreds = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
+            thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()))) tsls
+            cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
+            (tsls, preds) = unzip $ map (uncurry func) cartProd
                 where
-                cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
-                --func :: (PredEither, EqPred) -> (PredEither, EqPred) -> (Mu () AST, Mu () AST, Mu () AST, 
-                func (Left (l1, r1), l)  (Left (l2, r2), r)  = [predToTerm $ constructVarPred r1 r2, predToTerm l, predToTerm r]
-                func (Left (l1, r1), l)  (Right (l2, r2), r) = [predToTerm $ constructConstPred r1 r2, predToTerm l, predToTerm r]
-                func (Right (l1, r1), l) (Left (l2, r2), r)  = [predToTerm $ constructConstPred r2 r1, predToTerm l, predToTerm r]
-                func (Right (l1, r1), l) (Right (l2, r2), r) = [TopBot (if' (r1==r2) Top Bot), predToTerm l, predToTerm r]
+                func p1 p2 = ([nsPredToTerm p1, nsPredToTerm p2, tsl], pred) where (tsl, pred) = func' p1 p2
+                func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructVarPred r1 r2
+                func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (predToTerm pred, Just pred) where pred = constructConstPred r1 r2
+                func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructConstPred r2 r1
+                func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (TopBot (if' (r1==r2) Top Bot), Nothing)
 

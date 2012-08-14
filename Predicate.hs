@@ -4,7 +4,8 @@ module Predicate (
     constructConstPred,
     getPred,
     EqPred,
-    PredEither
+    PredEither,
+    NSEQPred(..)
     ) where
 
 data EqPred where
@@ -29,4 +30,9 @@ type PredEither = Either (String, String) (String, Int)
 getPred :: EqPred -> PredEither
 getPred (EqVar l r)   = Left (l, r)
 getPred (EqConst l r) = Right (l, r)
+
+data NSEQPred where
+    NsEqVar   :: String -> String -> NSEQPred
+    NsEqConst :: String -> Int    -> NSEQPred
+    deriving (Eq, Ord)
 
