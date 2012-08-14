@@ -3,7 +3,8 @@ module Predicate (
     constructVarPred, 
     constructConstPred,
     getPred,
-    EqPred
+    EqPred,
+    PredEither
     ) where
 
 data EqPred where
@@ -23,7 +24,9 @@ constructVarPred x y
 constructConstPred :: String -> Int -> EqPred
 constructConstPred = EqConst
 
-getPred :: EqPred -> Either (String, String) (String, Int) 
+type PredEither = Either (String, String) (String, Int)
+
+getPred :: EqPred -> PredEither
 getPred (EqVar l r)   = Left (l, r)
 getPred (EqConst l r) = Right (l, r)
 

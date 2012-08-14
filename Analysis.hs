@@ -81,10 +81,15 @@ data Abs1Return = Abs1Return {
     abs1Preds :: [EqPred]
 }
 
+data Abs2Return = Abs2Return {
+    abs2Tsl   :: Mu () AST,
+    abs2Preds :: [EqPred]
+}
+
 data Return = Return {
     varsRet :: [String],
     abs1Ret :: String -> Abs1Return,
-    abs2Ret :: String -> String -> Mu () AST
+    abs2Ret :: String -> String -> Abs2Return
 }
 
 varsAssigned :: CtrlExpr -> Either String Return
@@ -109,7 +114,11 @@ varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
                 abs1ress = map ($ absVar) caseabs1s
                 tsl   = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) $ map abs1Tsl abs1ress
                 preds = nub $ concat $ map abs1Preds abs1ress
-        abs2 lv rv = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) (map (($ lv) >>> ($ rv)) caseabs2s)
+        abs2 lv rv = Abs2Return tsl preds
+            where
+            rec = map (($ lv) >>> ($ rv)) caseabs2s
+            tsl = Mu () $ SyntaxTree.Case $ zip (map (binExpToTSL . fst) cases) (map abs2Tsl rec)
+            preds = nub $ concat $ map abs2Preds rec
 varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
     where
     rt = varsAssigned et
@@ -129,7 +138,12 @@ varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
                 abstres = ta1 absVar
                 abseres = ea1 absVar
                 tsl = Mu () $ TernOp (binExpToTSL c) (abs1Tsl abstres) (abs1Tsl abseres)
-        abs2 lv rv = Mu () $ TernOp (binExpToTSL c) (ta2 lv rv) (ea2 lv rv)
+        abs2 lv rv = Abs2Return tsl preds
+            where
+            tr = ta2 lv rv
+            er = ea2 lv rv
+            tsl = Mu () $ TernOp (binExpToTSL c) (abs2Tsl tr) (abs2Tsl er)
+            preds = nub $ abs2Preds tr ++ abs2Preds er
 varsAssigned (Conj es) = join $ res <$> sequenceA rres
     where
     rres = map varsAssigned es
@@ -150,17 +164,20 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
         abs2 lv rv 
             | fst lres == fst rres = abs2 lv rv
-            | otherwise            = Mu () $ Quant Exists (map predToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
+            | otherwise            = Abs2Return tsl newPreds
             where
+            tsl = Mu () $ Quant Exists (map predToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
             getRet var = fromJustNote "getIdent" $ Map.lookup var theMap
             labs1ret = abs1Ret (snd lres) lv
             rabs1ret = abs1Ret (snd rres) rv
             allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
             lres = getRet lv
             rres = getRet rv
+            newPreds = undefined
             thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()) . uncurry func . ((getPred &&& id) *** (getPred &&& id)))) cartProd
                 where
                 cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
+                --func :: (PredEither, EqPred) -> (PredEither, EqPred) -> (Mu () AST, Mu () AST, Mu () AST, 
                 func (Left (l1, r1), l)  (Left (l2, r2), r)  = [predToTerm $ constructVarPred r1 r2, predToTerm l, predToTerm r]
                 func (Left (l1, r1), l)  (Right (l2, r2), r) = [predToTerm $ constructConstPred r1 r2, predToTerm l, predToTerm r]
                 func (Right (l1, r1), l) (Left (l2, r2), r)  = [predToTerm $ constructConstPred r2 r1, predToTerm l, predToTerm r]
