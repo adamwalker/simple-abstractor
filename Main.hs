@@ -20,6 +20,8 @@ main = do
                 Left err -> print err
                 Right (Return vars abs1 abs2) -> do
                     print vars
-                    putDoc $ prettyPrint $ abs1Tsl $ abs1 "z"
                     putStrLn "\n"
-                    putDoc $ prettyPrint $ abs2Tsl $ abs2 "z" "v"
+                    let res = abs2 "z" "v"
+                    putDoc $ prettyPrint $ abs2Tsl res
+                    putStrLn "\n"
+                    print $ abs2Preds res

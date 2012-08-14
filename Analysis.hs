@@ -63,29 +63,40 @@ predToIdent pred = Ident [(predToString pred)] False
 predToTerm :: EqPred -> AST a
 predToTerm = Term . predToIdent
 
-valExprToTSL :: String -> ValExpr -> (Mu () AST, [EqPred])
+data ValExprToTSLRet = ValExprToTSLRet {
+    valExpTSL   :: Mu () AST,
+    primedPreds :: [EqPred],
+    newPreds    :: [EqPred]
+}
+
+uncurryValExpToTSLRet :: (Mu () AST -> [EqPred] -> [EqPred] -> a) -> ValExprToTSLRet -> a
+uncurryValExpToTSLRet f (ValExprToTSLRet x y z) = f x y z
+
+valExprToTSL :: String -> ValExpr -> ValExprToTSLRet
 valExprToTSL absVar = valExprToTSL'
     where
-    valExprToTSL' = first (Mu ()) . valExprToTSL''
+    valExprToTSL' (StringLit var) = ValExprToTSLRet (Mu () $ Term $ Ident [(predToString pred)] False) [pred] []
         where
-        valExprToTSL'' (StringLit var) = (Term $ Ident [(predToString pred)] False, [pred])
-            where
-            pred = constructVarPred (absVar ++ "'") var
-        valExprToTSL'' (IntLit int)    = (Term $ Ident [(predToString pred)] False, [pred])
-            where
-            pred = constructConstPred (absVar ++ "'") int
-        valExprToTSL'' (CaseV cases)   = (SyntaxTree.Case $ zip conds (map (uncurry f) ccases), allPreds)
-            where
-            ccases = map (valExprToTSL' . snd) cases
-            conds = map (fst . binExpToTSL . fst) cases
-            allPreds = nub $ concat $ map snd ccases
-            f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (allPreds \\ preds) ++ [tslcase]
-        valExprToTSL'' (IfV c t e)     = (TernOp (fst $ binExpToTSL c) tslT tslE, nub $ nub $ predsT ++ predsE)
-            where 
-            (tslT', predsT) = valExprToTSL' t 
-            (tslE', predsE) = valExprToTSL' e
-            tslT = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (predsE \\ predsT) ++ [tslT']
-            tslE = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (predsT \\ predsE) ++ [tslE']
+        pred = constructVarPred (absVar ++ "'") var
+    valExprToTSL' (IntLit int)    = ValExprToTSLRet (Mu () $ Term $ Ident [(predToString pred)] False) [pred] []
+        where
+        pred = constructConstPred (absVar ++ "'") int
+    valExprToTSL' (CaseV cases)   = ValExprToTSLRet (Mu () $ SyntaxTree.Case $ zip conds (map (uncurry f) (zip (map valExpTSL ccases) (map primedPreds ccases)))) allPreds newPreds
+        where
+        ccases = map (valExprToTSL' . snd) cases
+        conds' = map (binExpToTSL . fst) cases
+        conds  = map fst conds'
+        newPreds = nub $ concat $ map snd conds'
+        allPreds = nub $ concat $ map primedPreds ccases
+        f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (allPreds \\ preds) ++ [tslcase]
+    valExprToTSL' (IfV c t e)     = ValExprToTSLRet (Mu () $ TernOp (fst $ binExpToTSL c) tslT tslE) allPreds newPreds
+        where 
+        ValExprToTSLRet tslT' predsT newPredsT = valExprToTSL' t 
+        ValExprToTSLRet tslE' predsE newPredsE = valExprToTSL' e
+        tslT = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (predsE \\ predsT) ++ [tslT']
+        tslE = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . predToTerm) (predsT \\ predsE) ++ [tslE']
+        allPreds = nub $ predsT ++ predsE 
+        newPreds = nub $ newPredsT ++ newPredsE
 
 if' True  x y = x
 if' False x y = y
@@ -98,8 +109,9 @@ disjoint (hd:rst) = not (hd `elem` rst) && disjoint rst
 disjoint []       = True
 
 data Abs1Return = Abs1Return {
-    abs1Tsl   :: Mu () AST,
-    abs1Preds :: [EqPred]
+    abs1Tsl       :: Mu () AST,
+    abs1Preds     :: [EqPred],
+    abs1newPreds  :: [EqPred]
 }
 
 data Abs2Return = Abs2Return {
@@ -117,7 +129,7 @@ varsAssigned :: CtrlExpr -> Either String Return
 varsAssigned (Assign var valExp) = return $ Return [var] abs1 abs2
     where
     abs1 absVar 
-        | absVar == var = uncurry Abs1Return $ valExprToTSL var valExp
+        | absVar == var = uncurryValExpToTSLRet Abs1Return $ valExprToTSL var valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
 varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
@@ -129,11 +141,12 @@ varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
         caseabs1s = map abs1Ret subcases
         caseabs2s = map abs2Ret subcases
         abs1 absVar 
-            | absVar `elem` hd = Abs1Return tsl preds 
+            | absVar `elem` hd = Abs1Return tsl preds (nub $ concat (map snd binExpRes) ++ concat (map abs1newPreds abs1ress))
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
                 where
                 abs1ress = map ($ absVar) caseabs1s
-                tsl   = Mu () $ SyntaxTree.Case $ zip (map (fst . binExpToTSL . fst) cases) $ map abs1Tsl abs1ress
+                binExpRes = map (binExpToTSL . fst) cases
+                tsl   = Mu () $ SyntaxTree.Case $ zip (map fst binExpRes) $ map abs1Tsl abs1ress
                 preds = nub $ concat $ map abs1Preds abs1ress
         abs2 lv rv = Abs2Return tsl preds
             where
@@ -153,12 +166,13 @@ varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
         ta2 = abs2Ret rt
         ea2 = abs2Ret rt
         abs1 absVar
-            | absVar `elem` vt = Abs1Return tsl (nub $ abs1Preds abstres ++ abs1Preds abseres)
+            | absVar `elem` vt = Abs1Return tsl (nub $ abs1Preds abstres ++ abs1Preds abseres) (nub $ snd binExpRes ++ abs1newPreds abstres ++ abs1newPreds abseres)
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in if"
                 where
                 abstres = ta1 absVar
                 abseres = ea1 absVar
-                tsl = Mu () $ TernOp (fst $ binExpToTSL c) (abs1Tsl abstres) (abs1Tsl abseres)
+                binExpRes = binExpToTSL c
+                tsl = Mu () $ TernOp (fst binExpRes) (abs1Tsl abstres) (abs1Tsl abseres)
         abs2 lv rv = Abs2Return tsl preds
             where
             tr = ta2 lv rv
@@ -194,7 +208,7 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
             lres = getRet lv
             rres = getRet rv
-            newPreds = undefined
+            newPreds = abs1newPreds labs1ret ++ abs1newPreds rabs1ret
             thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()) . uncurry func . ((getPred &&& id) *** (getPred &&& id)))) cartProd
                 where
                 cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
