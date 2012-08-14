@@ -38,17 +38,13 @@ binExpToTSL = first (Mu ()) . binExpToTSL'
     where
     binExpToTSL' TrueE              = (TopBot Top, [])
     binExpToTSL' FalseE             = (TopBot Bot, [])
-    binExpToTSL' (Not x)            = (UnOp SyntaxTree.Not (fst rec), snd rec)
-        where
-        rec = binExpToTSL x
+    binExpToTSL' (Not x)            = (UnOp SyntaxTree.Not (fst rec), snd rec) where rec = binExpToTSL x
     binExpToTSL' (Bin op x y)       = (BinOp (absBOpToTSLBOp op) (fst lr) (fst rr), nub $ snd lr ++ snd rr)
         where
         lr = binExpToTSL x 
         rr = binExpToTSL y
     binExpToTSL' (Pred AST.Eq x y)  = handleSimpleValPred x y
-    binExpToTSL' (Pred AST.Neq x y) = (UnOp SyntaxTree.Not $ Mu () $ fst r, snd r)
-        where
-        r = handleSimpleValPred x y
+    binExpToTSL' (Pred AST.Neq x y) = (UnOp SyntaxTree.Not $ Mu () $ fst r, snd r) where r = handleSimpleValPred x y
     binExpToTSL' (Atom ident)       = (Term $ Ident [ident] False, [])
 
 predToString :: EqPred -> String
@@ -65,8 +61,8 @@ predToTerm :: EqPred -> AST a
 predToTerm = Term . predToIdent
 
 nsPredToString :: NSEQPred -> String
-nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "==" ++ r ++ "\""
-nsPredToString (NsEqConst x c) = "\"" ++ x ++ "==" ++ show c ++ "\""
+nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "'==" ++ r ++ "\""
+nsPredToString (NsEqConst x c) = "\"" ++ x ++ "'==" ++ show c ++ "\""
 
 nsPredToIdent :: NSEQPred -> Ident
 nsPredToIdent pred = Ident [(nsPredToString pred)] False
@@ -158,7 +154,9 @@ varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
                 where
                 abs1ress = map ($ absVar) caseabs1s
                 binExpRes = map (binExpToTSL . fst) cases
-                tsl   = Mu () $ SyntaxTree.Case $ zip (map fst binExpRes) $ map abs1Tsl abs1ress
+                allPreds = nub $ concat $ map abs1Preds abs1ress
+                tsl   = Mu () $ SyntaxTree.Case $ zip (map fst binExpRes) $ map (uncurry f . (abs1Tsl &&& abs1Preds))  abs1ress
+                f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (allPreds \\ preds) ++ [tslcase]
                 preds = nub $ concat $ map abs1Preds abs1ress
         abs2 lv rv = Abs2Return tsl preds
             where
@@ -185,6 +183,8 @@ varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
                 abseres = ea1 absVar
                 binExpRes = binExpToTSL c
                 tsl = Mu () $ TernOp (fst binExpRes) (abs1Tsl abstres) (abs1Tsl abseres)
+                tslT = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (abs1Preds abseres \\ abs1Preds abstres) ++ [abs1Tsl abstres]
+                tslE = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (abs1Preds abstres \\ abs1Preds abseres) ++ [abs1Tsl abseres]
         abs2 lv rv = Abs2Return tsl preds
             where
             tr = ta2 lv rv
