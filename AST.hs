@@ -24,5 +24,6 @@ data BinExpr where
     Not    :: BinExpr                         -> BinExpr
     Bin    :: BinOpType -> BinExpr -> BinExpr -> BinExpr
     Pred   :: PredType -> ValExpr -> ValExpr  -> BinExpr
+    Atom   :: String                          -> BinExpr
     deriving (Show)
 

@@ -6,7 +6,7 @@ CONJ /*x, y, z, t*/{
         y==3 : 6;
     };
     case /*u, v*/ {
-        x==2 : CONJ /*u, v*/ {
+        a : CONJ /*u, v*/ {
             u := 8;
             v := 9;
             /*

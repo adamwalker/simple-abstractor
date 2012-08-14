@@ -36,7 +36,8 @@ predicate =   (try $ (Pred Eq)  <$> valExpr <* reservedOp "==" <*> valExpr)
 term =   parens binExpr
      <|> TrueE <$ reserved "true" 
      <|> FalseE <$ reserved "false"
-     <|> predicate
+     <|> try predicate
+     <|> Atom <$> identifier
      <?> "simple expression"
 
 table = [[prefix "-"  Not]

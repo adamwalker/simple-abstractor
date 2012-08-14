@@ -20,14 +20,28 @@ import Predicate
 absBOpToTSLBOp AST.And = SyntaxTree.And
 absBOpToTSLBOp AST.Or  = SyntaxTree.Or
 
+handleSimpleValPred :: ValExpr -> ValExpr -> (AST a, [EqPred])
+handleSimpleValPred (StringLit x) (IntLit    y) = (predToTerm pred, [pred])
+    where
+    pred = constructConstPred x y
+handleSimpleValPred (IntLit    x) (StringLit y) = (predToTerm pred, [pred])
+    where
+    pred = constructConstPred y x
+handleSimpleValPred (StringLit x) (StringLit y) = (predToTerm pred, [pred])
+    where
+    pred = constructVarPred x y
+handleSimpleValPred (IntLit    x) (IntLit    y) = (if' (x==y) (TopBot Top) (TopBot Bot), [])
+
 binExpToTSL :: BinExpr -> Mu () AST 
 binExpToTSL = Mu () . binExpToTSL'
     where
-    binExpToTSL' TrueE           = TopBot Top
-    binExpToTSL' FalseE          = TopBot Bot
-    binExpToTSL' (Not x)         = UnOp SyntaxTree.Not (binExpToTSL x)
-    binExpToTSL' (Bin op x y)    = BinOp (absBOpToTSLBOp op) (binExpToTSL x) (binExpToTSL y)
-    binExpToTSL' (Pred pred x y) = Term $ Ident ["Some pred in binExpToTSL"] False
+    binExpToTSL' TrueE              = TopBot Top
+    binExpToTSL' FalseE             = TopBot Bot
+    binExpToTSL' (Not x)            = UnOp SyntaxTree.Not (binExpToTSL x)
+    binExpToTSL' (Bin op x y)       = BinOp (absBOpToTSLBOp op) (binExpToTSL x) (binExpToTSL y)
+    binExpToTSL' (Pred AST.Eq x y)  = fst $ handleSimpleValPred x y
+    binExpToTSL' (Pred AST.Neq x y) = UnOp SyntaxTree.Not $ Mu () $ fst $ handleSimpleValPred x y
+    binExpToTSL' (Atom ident)     = Term $ Ident [ident] False
 
 predToString :: EqPred -> String
 predToString pred = predToString' val
