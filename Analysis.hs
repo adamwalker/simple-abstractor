@@ -226,7 +226,9 @@ varsAssigned (Conj es) = join $ res <$> sequenceA rres
             (tsls, preds) = unzip $ map (uncurry func) cartProd
                 where
                 func p1 p2 = ([nsPredToTerm p1, nsPredToTerm p2, tsl], pred) where (tsl, pred) = func' p1 p2
-                func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructVarPred r1 r2
+                func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   
+                    | r1==r2    = (TopBot Top, Nothing)
+                    | otherwise = (predToTerm pred, Just pred) where pred = constructVarPred r1 r2
                 func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (predToTerm pred, Just pred) where pred = constructConstPred r1 r2
                 func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructConstPred r2 r1
                 func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (TopBot (if' (r1==r2) Top Bot), Nothing)
