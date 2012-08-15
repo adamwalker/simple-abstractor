@@ -62,5 +62,5 @@ vcase     = CaseV     <$ reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <
 vif       = IfV       <$ reserved "if" <*> parens binExpr <*> braces valExpr <* reserved "else" <*> braces valExpr
 valExpr   = vif <|> vcase <|> intLit <|> stringLit
 
-top = ctrlExpr <* eof
+top = whiteSpace *> ctrlExpr <* eof
 
