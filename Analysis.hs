@@ -133,16 +133,16 @@ data Return = Return {
     abs2Ret :: String -> String -> Abs2Return
 }
 
-varsAssigned :: CtrlExpr -> Either String Return
-varsAssigned (Assign var valExp) = return $ Return [var] abs1 abs2
+abstract :: CtrlExpr -> Either String Return
+abstract (Assign var valExp) = return $ Return [var] abs1 abs2
     where
     abs1 absVar 
         | absVar == var = uncurryValExpToTSLRet Abs1Return $ valExprToTSL var valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
-varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
+abstract (CaseC cases)  = join $ res <$> sequenceA subcases
     where
-    subcases = map (varsAssigned . snd) cases
+    subcases = map (abstract . snd) cases
     res subcases = if' (and (map (==hd) rst)) (return $ Return hd abs1 abs2) (throwError "Different vars assigned in case branches")
         where
         (hd:rst)  = map (sort . varsRet) subcases
@@ -163,10 +163,10 @@ varsAssigned (CaseC cases)  = join $ res <$> sequenceA subcases
             rec = map (($ lv) >>> ($ rv)) caseabs2s
             tsl = Mu () $ SyntaxTree.Case $ zip (map (fst . binExpToTSL . fst) cases) (map abs2Tsl rec)
             preds = nub $ concat $ map abs2Preds rec
-varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
+abstract (IfC c et ee)  = join $ res <$> rt <*> re
     where
-    rt = varsAssigned et
-    re = varsAssigned ee
+    rt = abstract et
+    re = abstract ee
     res rt re = if' (vt == ve) (return $ Return vt abs1 abs2) (throwError "Different vars assigned in if branches")
         where
         vt  = sort $ varsRet rt
@@ -191,9 +191,9 @@ varsAssigned (IfC c et ee)  = join $ res <$> rt <*> re
             er = ea2 lv rv
             tsl = Mu () $ TernOp (fst $ binExpToTSL c) (abs2Tsl tr) (abs2Tsl er)
             preds = nub $ abs2Preds tr ++ abs2Preds er
-varsAssigned (Conj es) = join $ res <$> sequenceA rres
+abstract (Conj es) = join $ res <$> sequenceA rres
     where
-    rres = map varsAssigned es
+    rres = map abstract es
     res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2) (throwError "Vars assigned in case statement are not disjoint")
         where
         varsAssigned = map varsRet rres
