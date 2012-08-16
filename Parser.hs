@@ -40,7 +40,7 @@ term =   parens binExpr
      <|> Atom <$> identifier
      <?> "simple expression"
 
-table = [[prefix "-"  Not]
+table = [[prefix "!"  Not]
         ,[binary  "&&" (Bin And) AssocLeft]
         ,[binary  "||" (Bin Or)  AssocLeft]
         ]
