@@ -1,9 +1,10 @@
 {-#LANGUAGE TupleSections, GADTs #-}
 module Analysis where
 
+import Prelude hiding (sequence)
 import Control.Applicative
 import Data.Traversable
-import Control.Monad.Error 
+import Control.Monad.Error hiding (sequence) 
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.List
@@ -106,6 +107,32 @@ valExprToTSL absVar = valExprToTSL'
         allPreds = nub $ predsT ++ predsE 
         newPreds = nub $ newPredsT ++ newPredsE
 
+data PassValTSLRet = PassValTSLRet {
+    passValTSLTSL   :: Mu () AST,
+    passValTSLPreds :: [EqPred]
+}
+
+uncurryPassValTSLRet :: (Mu () AST -> [EqPred] -> a) -> PassValTSLRet -> a
+uncurryPassValTSLRet f (PassValTSLRet x y) = f x y 
+
+passValTSL :: ValExpr -> Either String PassValTSLRet
+passVaTSL (StringLit var) = return $ PassValTSLRet (Mu () $ Term (Ident [var] False)) []
+passValTSL (IntLit int)    = return $ PassValTSLRet (Mu () $ Lit (fromIntegral int)) []
+passValTSL (CaseV cases)   = f <$> sequence recs
+    where
+    conds = map (binExpToTSL . fst) cases
+    recs  = map (passValTSL . snd) cases
+    f recs = PassValTSLRet (Mu () $ SyntaxTree.Case $ zip (map fst conds) (map passValTSLTSL recs)) (nub $ concat $ map snd conds ++ map passValTSLPreds recs)
+passValTSL (IfV c t e)     = f <$> tr <*> er
+    where
+    (ctsl, cpreds)         = binExpToTSL c
+    tr = passValTSL t
+    er = passValTSL e
+    f tr er = PassValTSLRet (Mu () $ TernOp ctsl ttsl etsl) (nub $ cpreds ++ tpreds ++ epreds)
+        where
+        PassValTSLRet ttsl tpreds = tr 
+        PassValTSLRet etsl epreds = er
+
 if' True  x y = x
 if' False x y = y
 
@@ -127,27 +154,41 @@ data Abs2Return = Abs2Return {
     abs2Preds :: [EqPred]
 }
 
+data PassThroughReturn = PassThroughReturn {
+    passTSL   :: Mu () AST,
+    passPreds :: [EqPred]
+}
+
 data Return = Return {
     varsRet :: [String],
     abs1Ret :: String -> Abs1Return,
-    abs2Ret :: String -> String -> Abs2Return
+    abs2Ret :: String -> String -> Abs2Return,
+    passRet :: String -> Either String PassThroughReturn
 }
 
 abstract :: CtrlExpr -> Either String Return
-abstract (Assign var valExp) = return $ Return [var] abs1 abs2
+abstract (Assign var valExp) = return $ Return [var] abs1 abs2 pass
     where
     abs1 absVar 
         | absVar == var = uncurryValExpToTSLRet Abs1Return $ valExprToTSL var valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
+    pass var = f <$> rec
+        where
+        rec = passValTSL valExp
+        f rec = PassThroughReturn (Mu () $ BinOp SyntaxTree.Eq (Mu () $ Term (Ident [var] False)) tsl) preds
+            where
+            PassValTSLRet tsl preds = rec
 abstract (CaseC cases)  = join $ res <$> sequenceA subcases
     where
     subcases = map (abstract . snd) cases
-    res subcases = if' (and (map (==hd) rst)) (return $ Return hd abs1 abs2) (throwError "Different vars assigned in case branches")
+    res subcases = if' (and (map (==hd) rst)) (return $ Return hd abs1 abs2 pass) (throwError "Different vars assigned in case branches")
         where
-        (hd:rst)  = map (sort . varsRet) subcases
-        caseabs1s = map abs1Ret subcases
-        caseabs2s = map abs2Ret subcases
+        (hd:rst)   = map (sort . varsRet) subcases
+        caseabs1s  = map abs1Ret subcases
+        caseabs2s  = map abs2Ret subcases
+        casePasses = map passRet subcases
+        conds = map (binExpToTSL . fst) cases
         abs1 absVar 
             | absVar `elem` hd = Abs1Return tsl preds (nub $ concat (map snd binExpRes) ++ concat (map abs1newPreds abs1ress))
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
@@ -161,13 +202,17 @@ abstract (CaseC cases)  = join $ res <$> sequenceA subcases
         abs2 lv rv = Abs2Return tsl preds
             where
             rec = map (($ lv) >>> ($ rv)) caseabs2s
-            tsl = Mu () $ SyntaxTree.Case $ zip (map (fst . binExpToTSL . fst) cases) (map abs2Tsl rec)
-            preds = nub $ concat $ map abs2Preds rec
+            tsl = Mu () $ SyntaxTree.Case $ zip (map fst conds) (map abs2Tsl rec)
+            preds = nub $ concat $ map abs2Preds rec ++ map snd conds
+        pass var = f <$> sequence rec
+            where
+            rec = map ($ var) casePasses
+            f rec = PassThroughReturn (Mu () $ SyntaxTree.Case $ zip (map fst conds) (map passTSL rec)) (nub $ concat $ map passPreds rec ++ map snd conds)
 abstract (IfC c et ee)  = join $ res <$> rt <*> re
     where
     rt = abstract et
     re = abstract ee
-    res rt re = if' (vt == ve) (return $ Return vt abs1 abs2) (throwError "Different vars assigned in if branches")
+    res rt re = if' (vt == ve) (return $ Return vt abs1 abs2 pass) (throwError "Different vars assigned in if branches")
         where
         vt  = sort $ varsRet rt
         ve  = sort $ varsRet rt 
@@ -175,6 +220,7 @@ abstract (IfC c et ee)  = join $ res <$> rt <*> re
         ea1 = abs1Ret rt
         ta2 = abs2Ret rt
         ea2 = abs2Ret rt
+        cr = binExpToTSL c
         abs1 absVar
             | absVar `elem` vt = Abs1Return tsl (nub $ abs1Preds abstres ++ abs1Preds abseres) (nub $ snd binExpRes ++ abs1newPreds abstres ++ abs1newPreds abseres)
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in if"
@@ -189,12 +235,17 @@ abstract (IfC c et ee)  = join $ res <$> rt <*> re
             where
             tr = ta2 lv rv
             er = ea2 lv rv
-            tsl = Mu () $ TernOp (fst $ binExpToTSL c) (abs2Tsl tr) (abs2Tsl er)
-            preds = nub $ abs2Preds tr ++ abs2Preds er
+            tsl = Mu () $ TernOp (fst cr) (abs2Tsl tr) (abs2Tsl er)
+            preds = nub $ abs2Preds tr ++ abs2Preds er ++ snd cr
+        pass var = f cr <$> tr <*> er
+            where
+            tr = passRet rt var
+            er = passRet re var
+            f cr tr er = PassThroughReturn (Mu () $ TernOp (fst cr) (passTSL tr) (passTSL er)) (nub $ snd cr ++ passPreds tr ++ passPreds er)
 abstract (Conj es) = join $ res <$> sequenceA rres
     where
     rres = map abstract es
-    res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2) (throwError "Vars assigned in case statement are not disjoint")
+    res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2 pass) (throwError "Vars assigned in case statement are not disjoint")
         where
         varsAssigned = map varsRet rres
         allVars  = concat varsAssigned
@@ -232,4 +283,5 @@ abstract (Conj es) = join $ res <$> sequenceA rres
                 func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (predToTerm pred, Just pred) where pred = constructConstPred r1 r2
                 func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructConstPred r2 r1
                 func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (TopBot (if' (r1==r2) Top Bot), Nothing)
+        pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
 
