@@ -2,6 +2,7 @@ module Main where
 
 import Control.Monad
 import System.Environment
+import Data.Maybe
 
 import Text.PrettyPrint.Leijen.Text (putDoc)
 import Text.Parsec hiding ((<|>))
@@ -9,6 +10,7 @@ import Text.Parsec hiding ((<|>))
 import Parser
 import Analysis
 import TSLPP
+import Predicate
 
 main = do
     [fname, l, r] <- getArgs
@@ -27,6 +29,9 @@ main = do
                     putDoc $ prettyPrint $ abs2Tsl res
                     putStrLn "\n"
                     print $ abs2Preds res
+                    let tuples = consistencyPreds $ (catMaybes $ map toVarPair $ abs2Preds res) ++ [("os_lba_hi","read_req_lba_hi_arg")]
+                    print tuples
+                    putDoc $ prettyPrint $ constraintSection tuples
                     let res = pass "os_st"
                     case res of
                         Left str -> print str

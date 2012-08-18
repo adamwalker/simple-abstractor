@@ -12,6 +12,7 @@ import Data.Maybe
 import Control.Arrow
 
 import Safe
+import Data.Tuple.All
 
 import qualified SyntaxTree
 import SyntaxTree hiding (Not, Conj)
@@ -284,4 +285,15 @@ abstract (Conj es) = join $ res <$> sequenceA rres
                 func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructConstPred r2 r1
                 func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (TopBot (if' (r1==r2) Top Bot), Nothing)
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
+
+eqConstraintTSL :: String -> String -> String -> Mu () AST
+eqConstraintTSL x y z = Mu () $ BlockOp SyntaxTree.Conj $ [func x y z, func y z x, func z x y]
+    where
+    func x y z = (mt x y `ma` mt y z) `mi` mt x z
+    mt x y     = Mu () $ predToTerm $ constructVarPred x y
+    mi x y     = Mu () $ BinOp Imp x y
+    ma x y     = Mu () $ BinOp SyntaxTree.And x y
+
+constraintSection :: [(String, String, String)] -> Mu () AST
+constraintSection x = Mu () $ BlockOp SyntaxTree.Conj $ map (uncurryN eqConstraintTSL) x
 
