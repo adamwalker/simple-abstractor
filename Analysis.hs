@@ -47,7 +47,7 @@ binExpToTSL = first (Mu ()) . binExpToTSL'
         rr = binExpToTSL y
     binExpToTSL' (Pred AST.Eq x y)  = handleSimpleValPred x y
     binExpToTSL' (Pred AST.Neq x y) = (UnOp SyntaxTree.Not $ Mu () $ fst r, snd r) where r = handleSimpleValPred x y
-    binExpToTSL' (Atom ident)       = (Term $ Ident [ident] False, [])
+    binExpToTSL' (Atom ident)       = (Term $ Ident [ident] False, [constructConstPred ident 0])
 
 predToString :: EqPred -> String
 predToString pred = predToString' val
