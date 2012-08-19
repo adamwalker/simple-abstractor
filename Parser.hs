@@ -12,7 +12,7 @@ import Text.Parsec.Language
 import AST
 
 --The lexer
-reservedNames = ["CONJ", "case", "true", "false", "if"]
+reservedNames = ["case", "true", "false", "if"]
 reservedOps   = ["!", "&&", "||", "!=", "==", ":="]
 
 lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames
@@ -52,7 +52,7 @@ prefix name fun       = Prefix (fun <$ reservedOp name)
 assign   = Assign <$> identifier <* reservedOp ":=" <*> valExpr
 ccase    = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> ctrlExpr) semi)
 cif      = IfC    <$  reserved "if" <*> parens binExpr <*> braces ctrlExpr <* reserved "else" <*> braces ctrlExpr
-conj     = Conj   <$  reserved "CONJ" <*> braces (sepEndBy ctrlExpr semi)
+conj     = Conj   <$> braces (sepEndBy ctrlExpr semi)
 ctrlExpr = conj <|> ccase <|> cif <|> assign
 
 --Value expressions
