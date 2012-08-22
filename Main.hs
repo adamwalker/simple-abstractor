@@ -38,4 +38,6 @@ main = do
                         Right (PassThroughReturn tsl preds) -> do
                             putDoc $ prettyPrint $ tsl
                             print preds
+                    let Abs1Return tsl preds newPreds = abs1 "os_st"
+                    putDoc $ prettyPrint tsl
                             

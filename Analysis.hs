@@ -34,6 +34,7 @@ handleSimpleValPred (StringLit x) (StringLit y) = (predToTerm pred, [pred])
     where
     pred = constructVarPred x y
 handleSimpleValPred (IntLit    x) (IntLit    y) = (if' (x==y) (TopBot Top) (TopBot Bot), [])
+handleSimpleValPred _ _                         = error "handleSimplePred: not implemented"
 
 binExpToTSL :: BinExpr -> (Mu () AST, [EqPred])
 binExpToTSL = first (Mu ()) . binExpToTSL'
