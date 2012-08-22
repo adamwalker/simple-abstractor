@@ -1,0 +1,183 @@
+/*
+STATE
+dev_lba_low, dev_lba_hi, os_lba_low, os_lba_hi, dev_st, os_st
+
+CLABEL
+cont
+ctag
+write8_arg, 
+
+ULABEL
+utag
+read_req_lba_low_arg, read_req_lba_hi_arg
+
+*/
+{
+    dev_lba_low := case {
+        cont && ctag==0 && addr==0 : write8_arg;
+        true                       : os_lba_low;
+    };
+
+    dev_lba_hi := case {
+        cont && ctag==0 && addr==1 : dev_lba_low;
+        true                       : dev_lba_hi;
+    };
+
+    dev_sect := case {
+        cont && ctag==0 && addr==2 : write8_arg;
+        true                       : dev_sect;
+    };
+
+    /*
+
+    dev_sect_finite : {udma_m1, udma_m2, other}
+    write8_arg_dev_sect_fin : same as above
+    will introduce preds such as write8arg==udma_m1 etc
+
+    dev_sect_finite := case {
+        cont && ctag==0 && addr==2 : write8_arg_dev_sect_fin;
+        true                       : dev_sect_finite;
+    };
+
+    */
+
+    os_lba_low := case {
+        !cont && utag==0 : read_req_lba_low_arg;
+        true             : os_lba_low;
+    };
+
+    os_lba_hi := case {
+        !cont && utag==0 : read_req_lba_hi_arg;
+        true             : os_lba_hi;
+    };
+
+    dev_st := case {
+        dev_st==0 : case {
+            cont && ctag==1 && addr==3  : 1;
+            !cont && utag==1            : 2; //dev_impossible
+            true                        : 0;
+        };
+        dev_st==1 : case {
+            !cont && utag==1            : 0;
+            true                        : 1;
+        };
+    };
+
+    class_udma_mode_set := case {
+        dev_st==0 && cont && ctag==1 && addr==4 : 1;
+        true                                    : 0;
+    };
+
+    class_udma_mode_val := dev_sect;
+
+    class_sect_written := if(utag==1){1}else{0};
+    class_lba_low  := dev_lba_low;
+
+    os_st := case {
+        os_st==0 : case {
+            !cont && class_sect_written : 2; //error
+            !cont && utag==2            : 1;
+            true                        : 0;
+        };
+        os_st==1 : case {
+            !cont && class_sect_written && class_lba_low!=os_lba_low : 2;
+            !cont && class_sect_written && class_lba_low==os_lba_low : 0;
+            true                                                     : 1;
+        };
+   };
+}
+
+/*
+    goal : os_st==0 || dev_st==dev_impossible
+*/
+
+/*
+
+--finite domain abstraction
+
+os_st==0 -> 
+
+case {
+    os_st==0 : case {
+        !cont && utag==1 : !"os_st==0";
+        !cont && utag==2 : "os_st==0"
+        ...
+    };
+    ...
+}
+
+--or
+
+reg_sect := case {
+    tag==write8 : wval8;
+    true        : reg_sect;
+}
+
+
+=====>
+
+pred : reg_sect==os_sect 
+
+case {
+    tag==write8 : "reg_sect'==wval8";
+    true        : "reg_sect'==reg_sect";
+}
+
+eventually we get: os_sect==wval8
+
+pred : reg_sect==8 //const = some command
+
+case {
+    tag==write8 : "wval8==8";
+    true        : "reg_sect==8";
+}
+
+new preds: os_sect==wval8, wval8_8==8, reg_sect==8
+
+new new preds: os_sect==8
+
+
+what if:
+
+x==l, y==l, x==z, y==z, (x, y, z) are state preds
+first pass:
+x==y, add constraints on this, x==z and x==y
+
+
+--refinement
+
+forall (os_st, cont, utag).
+   os_st==0 && !(cont && utag==2) -> os_st'==0
+|| os_st==1 && !cont && utag==1   -> os_st'==0
+
+pick one state predicate -> os_st==0 or os_st==1
+
+what now? We dont know if utag is available. Cpre says - forall utag and exists utag. Avl(utag) is implicit
+
+dev_st==0 && !cont && utag==1 -> dev_st==dev_impossible
+not allowed = dev_st==0 && !cont && utag==1
+
+--finding finite subdomain:
+
+search for all preds
+eg if variable is x and find x==1, x==5...
+what if dev_sect has eq preds as well? - ignore
+what if new preds appear when combining labels? 
+    eg l==8, l==x, x==8
+
+
+variables have some possibly infinite domain with some concrete elements eg 0, 1, 2, False, True
+
+we want update functions for:
+x==y 
+x==c where c is an element of xs domain
+maybe entire variable if it comes from a small domain and is only assigned similar variables
+
+atoms in our language are: x==y, x==c and x which is the same as x/=0
+
+depends on variable representation
+x==c : entire domain of x represented?
+x==y : entire domain of x and y represented?
+
+
+*/
