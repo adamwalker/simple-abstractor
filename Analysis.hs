@@ -13,6 +13,7 @@ import Control.Arrow
 
 import Safe
 import Data.Tuple.All
+import Debug.TraceUtils
 
 import qualified SyntaxTree
 import SyntaxTree hiding (Not, Conj)
@@ -217,11 +218,11 @@ abstract (IfC c et ee)  = join $ res <$> rt <*> re
     res rt re = if' (vt == ve) (return $ Return vt abs1 abs2 pass) (throwError "Different vars assigned in if branches")
         where
         vt  = sort $ varsRet rt
-        ve  = sort $ varsRet rt 
+        ve  = sort $ varsRet re 
         ta1 = abs1Ret rt
-        ea1 = abs1Ret rt
+        ea1 = abs1Ret re
         ta2 = abs2Ret rt
-        ea2 = abs2Ret rt
+        ea2 = abs2Ret re
         cr = binExpToTSL c
         abs1 absVar
             | absVar `elem` vt = Abs1Return tsl (nub $ abs1Preds abstres ++ abs1Preds abseres) (nub $ snd binExpRes ++ abs1newPreds abstres ++ abs1newPreds abseres)
