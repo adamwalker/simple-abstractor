@@ -24,32 +24,35 @@ import Predicate
 absBOpToTSLBOp AST.And = SyntaxTree.And
 absBOpToTSLBOp AST.Or  = SyntaxTree.Or
 
-handleSimpleValPred :: ValExpr -> ValExpr -> (AST a, [EqPred])
-handleSimpleValPred (StringLit x) (IntLit    y) = (predToTerm pred, [pred])
+handleSimpleValPred :: ValExpr -> ValExpr -> (Mu () AST, [EqPred])
+handleSimpleValPred (StringLit x) (IntLit    y) = (Mu () $ predToTerm pred, [pred])
     where
     pred = constructConstPred x y
-handleSimpleValPred (IntLit    x) (StringLit y) = (predToTerm pred, [pred])
+handleSimpleValPred (IntLit    x) (StringLit y) = (Mu () $ predToTerm pred, [pred])
     where
     pred = constructConstPred y x
-handleSimpleValPred (StringLit x) (StringLit y) = (predToTerm pred, [pred])
+handleSimpleValPred (StringLit x) (StringLit y) = (Mu () $ predToTerm pred, [pred])
     where
     pred = constructVarPred x y
-handleSimpleValPred (IntLit    x) (IntLit    y) = (if' (x==y) (TopBot Top) (TopBot Bot), [])
-handleSimpleValPred _ _                         = error "handleSimplePred: not implemented"
+handleSimpleValPred (IntLit    x) (IntLit    y) = (if' (x==y) (Mu () $ TopBot Top) (Mu () $ TopBot Bot), [])
+handleSimpleValPred l r                         = equalityValue "anon1" "anon2" (uncurryValExpToTSLRet Abs1Return lr) (uncurryValExpToTSLRet Abs1Return rr)
+    where
+    lr = valExprToTSL "anon1" l
+    rr = valExprToTSL "anon2" r
 
 binExpToTSL :: BinExpr -> (Mu () AST, [EqPred])
-binExpToTSL = first (Mu ()) . binExpToTSL'
+binExpToTSL = binExpToTSL'
     where
-    binExpToTSL' TrueE              = (TopBot Top, [])
-    binExpToTSL' FalseE             = (TopBot Bot, [])
-    binExpToTSL' (Not x)            = (UnOp SyntaxTree.Not (fst rec), snd rec) where rec = binExpToTSL x
-    binExpToTSL' (Bin op x y)       = (BinOp (absBOpToTSLBOp op) (fst lr) (fst rr), nub $ snd lr ++ snd rr)
+    binExpToTSL' TrueE              = (Mu () $ TopBot Top, [])
+    binExpToTSL' FalseE             = (Mu () $ TopBot Bot, [])
+    binExpToTSL' (Not x)            = (Mu () $ UnOp SyntaxTree.Not (fst rec), snd rec) where rec = binExpToTSL x
+    binExpToTSL' (Bin op x y)       = (Mu () $ BinOp (absBOpToTSLBOp op) (fst lr) (fst rr), nub $ snd lr ++ snd rr)
         where
         lr = binExpToTSL x 
         rr = binExpToTSL y
     binExpToTSL' (Pred AST.Eq x y)  = handleSimpleValPred x y
-    binExpToTSL' (Pred AST.Neq x y) = (UnOp SyntaxTree.Not $ Mu () $ fst r, snd r) where r = handleSimpleValPred x y
-    binExpToTSL' (Atom ident)       = (Term $ Ident [ident] False, [constructConstPred ident 0])
+    binExpToTSL' (Pred AST.Neq x y) = (Mu () $ UnOp SyntaxTree.Not $ fst r, snd r) where r = handleSimpleValPred x y
+    binExpToTSL' (Atom ident)       = (Mu () $ Term $ Ident [ident] False, [constructConstPred ident 0])
 
 predToString :: EqPred -> String
 predToString pred = predToString' val
@@ -267,26 +270,31 @@ abstract (Conj es) = join $ res <$> sequenceA rres
             | fst lres == fst rres = abs2 lv rv
             | otherwise            = Abs2Return tsl newPreds
             where
-            tsl = Mu () $ Quant Exists (map nsPredToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
             getRet var = fromJustNote "getIdent" $ Map.lookup var theMap
             labs1ret = abs1Ret (snd lres) lv
             rabs1ret = abs1Ret (snd rres) rv
-            allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
             lres = getRet lv
             rres = getRet rv
-            newPreds = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
-            thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()))) tsls
-            cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
-            (tsls, preds) = unzip $ map (uncurry func) cartProd
-                where
-                func p1 p2 = ([nsPredToTerm p1, nsPredToTerm p2, tsl], pred) where (tsl, pred) = func' p1 p2
-                func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   
-                    | r1==r2    = (TopBot Top, Nothing)
-                    | otherwise = (predToTerm pred, Just pred) where pred = constructVarPred r1 r2
-                func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (predToTerm pred, Just pred) where pred = constructConstPred r1 r2
-                func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructConstPred r2 r1
-                func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (TopBot (if' (r1==r2) Top Bot), Nothing)
+            (tsl, newPreds) = equalityValue lv rv labs1ret rabs1ret
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
+
+equalityValue :: String -> String -> Abs1Return -> Abs1Return -> (Mu () AST, [EqPred])
+equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
+    where
+    tsl = Mu () $ Quant Exists (map nsPredToIdent allPreds) $ Mu () $ BlockOp SyntaxTree.Conj $ [abs1Tsl labs1ret, abs1Tsl rabs1ret, thePreds]
+    newPreds = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
+    allPreds = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
+    thePreds = Mu () $ BinOp SyntaxTree.Eq (Mu () $ predToTerm $ constructVarPred lv rv) $ Mu () $ BlockOp SyntaxTree.Disj $ map ((Mu () . BlockOp SyntaxTree.Conj . map (Mu ()))) tsls
+    cartProd = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
+    (tsls, preds) = unzip $ map (uncurry func) cartProd
+        where
+        func p1 p2 = ([nsPredToTerm p1, nsPredToTerm p2, tsl], pred) where (tsl, pred) = func' p1 p2
+        func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   
+            | r1==r2    = (TopBot Top, Nothing)
+            | otherwise = (predToTerm pred, Just pred) where pred = constructVarPred r1 r2
+        func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (predToTerm pred, Just pred) where pred = constructConstPred r1 r2
+        func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (predToTerm pred, Just pred) where pred = constructConstPred r2 r1
+        func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (TopBot (if' (r1==r2) Top Bot), Nothing)
 
 eqConstraintTSL :: String -> String -> String -> Mu () AST
 eqConstraintTSL x y z = Mu () $ BlockOp SyntaxTree.Conj $ [func x y z, func y z x, func z x y]
