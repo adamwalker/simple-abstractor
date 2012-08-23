@@ -24,18 +24,18 @@ import Predicate
 absBOpToTSLBOp AST.And = SyntaxTree.And
 absBOpToTSLBOp AST.Or  = SyntaxTree.Or
 
-handleSimpleValPred :: ValExpr -> ValExpr -> (Mu () AST, [EqPred])
-handleSimpleValPred (StringLit x) (IntLit    y) = (Mu () $ predToTerm pred, [pred])
+handleValPred :: ValExpr -> ValExpr -> (Mu () AST, [EqPred])
+handleValPred (StringLit x) (IntLit    y) = (Mu () $ predToTerm pred, [pred])
     where
     pred = constructConstPred x y
-handleSimpleValPred (IntLit    x) (StringLit y) = (Mu () $ predToTerm pred, [pred])
+handleValPred (IntLit    x) (StringLit y) = (Mu () $ predToTerm pred, [pred])
     where
     pred = constructConstPred y x
-handleSimpleValPred (StringLit x) (StringLit y) = (Mu () $ predToTerm pred, [pred])
+handleValPred (StringLit x) (StringLit y) = (Mu () $ predToTerm pred, [pred])
     where
     pred = constructVarPred x y
-handleSimpleValPred (IntLit    x) (IntLit    y) = (if' (x==y) (Mu () $ TopBot Top) (Mu () $ TopBot Bot), [])
-handleSimpleValPred l r                         = equalityValue "anon1" "anon2" (uncurryValExpToTSLRet Abs1Return lr) (uncurryValExpToTSLRet Abs1Return rr)
+handleValPred (IntLit    x) (IntLit    y) = (if' (x==y) (Mu () $ TopBot Top) (Mu () $ TopBot Bot), [])
+handleValPred l r                         = equalityValue "anon1" "anon2" (uncurryValExpToTSLRet Abs1Return lr) (uncurryValExpToTSLRet Abs1Return rr)
     where
     lr = valExprToTSL "anon1" l
     rr = valExprToTSL "anon2" r
@@ -50,8 +50,8 @@ binExpToTSL = binExpToTSL'
         where
         lr = binExpToTSL x 
         rr = binExpToTSL y
-    binExpToTSL' (Pred AST.Eq x y)  = handleSimpleValPred x y
-    binExpToTSL' (Pred AST.Neq x y) = (Mu () $ UnOp SyntaxTree.Not $ fst r, snd r) where r = handleSimpleValPred x y
+    binExpToTSL' (Pred AST.Eq x y)  = handleValPred x y
+    binExpToTSL' (Pred AST.Neq x y) = (Mu () $ UnOp SyntaxTree.Not $ fst r, snd r) where r = handleValPred x y
     binExpToTSL' (Atom ident)       = (Mu () $ Term $ Ident [ident] False, [constructConstPred ident 0])
 
 predToString :: EqPred -> String
