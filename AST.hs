@@ -3,6 +3,7 @@ module AST where
 
 data CtrlExpr where
     Assign :: String -> ValExpr                -> CtrlExpr
+    Signal :: String -> ValExpr                -> CtrlExpr
     CaseC  :: [(BinExpr, CtrlExpr)]            -> CtrlExpr
     IfC    :: BinExpr -> CtrlExpr -> CtrlExpr  -> CtrlExpr
     Conj   :: [CtrlExpr]                       -> CtrlExpr

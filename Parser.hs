@@ -13,7 +13,7 @@ import AST
 
 --The lexer
 reservedNames = ["case", "true", "false", "if"]
-reservedOps   = ["!", "&&", "||", "!=", "==", ":="]
+reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
 
 lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames
                                     ,T.reservedOpNames = reservedOps
@@ -50,10 +50,11 @@ prefix name fun       = Prefix (fun <$ reservedOp name)
 
 --Control expressions
 assign   = Assign <$> identifier <* reservedOp ":=" <*> valExpr
+signal   = Signal <$> identifier <* reservedOp "<=" <*> valExpr
 ccase    = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> ctrlExpr) semi)
 cif      = IfC    <$  reserved "if" <*> parens binExpr <*> braces ctrlExpr <* reserved "else" <*> braces ctrlExpr
 conj     = Conj   <$> braces (sepEndBy ctrlExpr semi)
-ctrlExpr = conj <|> ccase <|> cif <|> assign
+ctrlExpr = conj <|> ccase <|> cif <|> try assign <|> signal
 
 --Value expressions
 stringLit = StringLit <$> identifier
