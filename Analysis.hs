@@ -104,40 +104,66 @@ valExprToTSL absVar = valExprToTSL'
         allPreds = nub $ concat $ map primedPreds ccases
         f :: Mu () AST -> [NSEQPred] -> Mu () AST
         f tslcase preds = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (allPreds \\ preds) ++ [tslcase]
-    valExprToTSL' (IfV c t e)     = ValExprToTSLRet (Mu () $ TernOp (fst $ binExpToTSL c) tslT tslE) allPreds newPreds
+    valExprToTSL' (IfV c t e)     = ValExprToTSLRet (Mu () $ TernOp ctsl tslT tslE) allPreds newPreds
         where 
+        (ctsl, cpreds) = binExpToTSL c
         ValExprToTSLRet tslT' predsT newPredsT = valExprToTSL' t 
         ValExprToTSLRet tslE' predsE newPredsE = valExprToTSL' e
         tslT = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (predsE \\ predsT) ++ [tslT']
         tslE = Mu () $ BlockOp SyntaxTree.Conj $ map (Mu () . UnOp SyntaxTree.Not . Mu () . nsPredToTerm) (predsT \\ predsE) ++ [tslE']
         allPreds = nub $ predsT ++ predsE 
-        newPreds = nub $ newPredsT ++ newPredsE
+        newPreds = nub $ newPredsT ++ newPredsE ++ cpreds
+
+varToTerm t = Mu () $ Term $ Ident [t] False
+intToTerm i = Mu () $ Lit $ fromIntegral i
+
+{-
+data ConstAbstrTSLRet = ConstAbstrTSLRet {
+    constTSL      :: Mu () AST,
+    constNewPreds :: [EqPred],
+    variables     :: [String] --variables encountered. These must have the same domain
+}
+
+constAbsTSL :: String -> [Int] -> ValExpr -> ConstAbstrTSLRet
+constAbsTSL absVar consts = constAbsTSL'
+    where
+    constAbsTSL' (StringLit var) = error "constAbsTSL for var not implemented"
+    constAbsTSL' (IntLit int)    = ConstAbstrTSLRet (Mu () $ BinOp SyntaxTree.Eq (varToTerm absVar) (intToTerm int)) []
+    constAbsTSL' (CaseV cases)   = Mu () $ SyntaxTree.Case $ zip conds 
+        where
+        conds = map (binExpToTSL . fst) cases
+        recs  = map (constAbsTSL' . snd) cases
+    constAbsTSL' (IfV c t e)     = ConstAbstrTSLRet (Mu () $ TernOp ctsl tslT tslE) (nub $ cpreds ++ tpreds ++ epreds)
+        where
+        (ctsl, cpreds) = binExpToTSL c
+        ConstAbstrTSLRet tslT predsT = constAbsTSL' t
+        ConstAbstrTSLRet tslE predsE = constAbsTSL' e 
+-}
 
 data PassValTSLRet = PassValTSLRet {
     passValTSLTSL   :: Mu () AST,
-    passValTSLPreds :: [EqPred]
+    passValTSLPreds :: [EqPred],
+    passValTSLInts  :: [Int],
+    passValTSLVars  :: [String]
 }
 
-uncurryPassValTSLRet :: (Mu () AST -> [EqPred] -> a) -> PassValTSLRet -> a
-uncurryPassValTSLRet f (PassValTSLRet x y) = f x y 
-
 passValTSL :: ValExpr -> Either String PassValTSLRet
-passVaTSL (StringLit var) = return $ PassValTSLRet (Mu () $ Term (Ident [var] False)) []
-passValTSL (IntLit int)    = return $ PassValTSLRet (Mu () $ Lit (fromIntegral int)) []
+passVaTSL (StringLit var) = return $ PassValTSLRet (varToTerm var) [] [] [var]
+passValTSL (IntLit int)    = return $ PassValTSLRet (intToTerm int) [] [int] []
 passValTSL (CaseV cases)   = f <$> sequence recs
     where
     conds = map (binExpToTSL . fst) cases
     recs  = map (passValTSL . snd) cases
-    f recs = PassValTSLRet (Mu () $ SyntaxTree.Case $ zip (map fst conds) (map passValTSLTSL recs)) (nub $ concat $ map snd conds ++ map passValTSLPreds recs)
+    f recs = PassValTSLRet (Mu () $ SyntaxTree.Case $ zip (map fst conds) (map passValTSLTSL recs)) (nub $ concat $ map snd conds ++ map passValTSLPreds recs) (nub $ concat $ map passValTSLInts recs) (nub $ concat $ map passValTSLVars recs)
 passValTSL (IfV c t e)     = f <$> tr <*> er
     where
     (ctsl, cpreds)         = binExpToTSL c
     tr = passValTSL t
     er = passValTSL e
-    f tr er = PassValTSLRet (Mu () $ TernOp ctsl ttsl etsl) (nub $ cpreds ++ tpreds ++ epreds)
+    f tr er = PassValTSLRet (Mu () $ TernOp ctsl ttsl etsl) (nub $ cpreds ++ tpreds ++ epreds) (nub $ tints ++ eints) (nub $ tvars ++ evars)
         where
-        PassValTSLRet ttsl tpreds = tr 
-        PassValTSLRet etsl epreds = er
+        PassValTSLRet ttsl tpreds tints tvars = tr 
+        PassValTSLRet etsl epreds eints evars = er
 
 if' True  x y = x
 if' False x y = y
@@ -162,7 +188,14 @@ data Abs2Return = Abs2Return {
 
 data PassThroughReturn = PassThroughReturn {
     passTSL   :: Mu () AST,
-    passPreds :: [EqPred]
+    passPreds :: [EqPred],
+    passInts  :: [Int],
+    passVars  :: [String]
+}
+
+data SignalReturn = SignalReturn {
+    sigPassTSL :: PassThroughReturn,
+    sigAbs1    :: Abs1Return
 }
 
 data Return = Return {
@@ -173,6 +206,11 @@ data Return = Return {
 }
 
 abstract :: CtrlExpr -> Either String Return
+abstract (Signal var valExp) = return $ Return [] abs1 abs2 pass
+    where
+    abs1 = error "abs1 called on signal"
+    abs2 = error "abs2 called on signal"
+    pass = error "pass called on signal"
 abstract (Assign var valExp) = return $ Return [var] abs1 abs2 pass
     where
     abs1 absVar 
@@ -182,9 +220,9 @@ abstract (Assign var valExp) = return $ Return [var] abs1 abs2 pass
     pass var = f <$> rec
         where
         rec = passValTSL valExp
-        f rec = PassThroughReturn (Mu () $ BinOp SyntaxTree.Eq (Mu () $ Term (Ident [var] False)) tsl) preds
+        f rec = PassThroughReturn (Mu () $ BinOp SyntaxTree.Eq (Mu () $ Term (Ident [var] False)) tsl) preds ints vars
             where
-            PassValTSLRet tsl preds = rec
+            PassValTSLRet tsl preds ints vars = rec
 abstract (CaseC cases)  = join $ res <$> sequenceA subcases
     where
     subcases = map (abstract . snd) cases
@@ -213,7 +251,7 @@ abstract (CaseC cases)  = join $ res <$> sequenceA subcases
         pass var = f <$> sequence rec
             where
             rec = map ($ var) casePasses
-            f rec = PassThroughReturn (Mu () $ SyntaxTree.Case $ zip (map fst conds) (map passTSL rec)) (nub $ concat $ map passPreds rec ++ map snd conds)
+            f rec = PassThroughReturn (Mu () $ SyntaxTree.Case $ zip (map fst conds) (map passTSL rec)) (nub $ concat $ map passPreds rec ++ map snd conds) (nub $ concat $ map passInts rec) (nub $ concat $ map passVars rec)
 abstract (IfC c et ee)  = join $ res <$> rt <*> re
     where
     rt = abstract et
@@ -247,7 +285,7 @@ abstract (IfC c et ee)  = join $ res <$> rt <*> re
             where
             tr = passRet rt var
             er = passRet re var
-            f cr tr er = PassThroughReturn (Mu () $ TernOp (fst cr) (passTSL tr) (passTSL er)) (nub $ snd cr ++ passPreds tr ++ passPreds er)
+            f cr tr er = PassThroughReturn (Mu () $ TernOp (fst cr) (passTSL tr) (passTSL er)) (nub $ snd cr ++ passPreds tr ++ passPreds er) (nub $ passInts tr ++ passInts er) (nub $ passVars tr ++ passVars er)
 abstract (Conj es) = join $ res <$> sequenceA rres
     where
     rres = map abstract es

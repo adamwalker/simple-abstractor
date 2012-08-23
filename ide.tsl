@@ -68,10 +68,10 @@ read_req_lba_low_arg, read_req_lba_hi_arg
         true                                    : 0;
     };
 
-    class_udma_mode_val := dev_sect;
+    class_udma_mode_val <= dev_sect;
 
-    class_sect_written := if(utag==1){1}else{0};
-    class_lba_low := dev_lba_low;
+    class_sect_written <= if(utag==1){1}else{0};
+    class_lba_low <= dev_lba_low;
 
     /*
     if(utag==1){

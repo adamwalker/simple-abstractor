@@ -35,9 +35,11 @@ main = do
                     let res = pass "os_st"
                     case res of
                         Left str -> print str
-                        Right (PassThroughReturn tsl preds) -> do
+                        Right (PassThroughReturn tsl preds ints vars) -> do
                             putDoc $ prettyPrint $ tsl
                             print preds
+                            print ints
+                            print vars
                     let Abs1Return tsl preds newPreds = abs1 "os_st"
                     putDoc $ prettyPrint tsl
                             
