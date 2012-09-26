@@ -195,5 +195,142 @@ depends on variable representation
 x==c : entire domain of x represented?
 x==y : entire domain of x and y represented?
 
+conj {
+    // Map String -> (abs1, passthrough)
+    // map has z, x, y
+    z <= f(..);
+    --z <= f(x);
+    case {
+        a : {
+                // Map String -> (ab1, passthrough)
+                // map has x, y
+                /*
+                    a : maintain Map String -> CtrlExpr as source of signal
+                    b : maintain a Map String -> (ab1, passthrough) as memo table
+                    go through all signals assigned at this level or lower
+                    
+                */
+                x <= f(y, z);
+                y <= f(z)
+
+                /*
+                    dependencies: 
+                    x -> [y, z]
+                    y -> [z]
+                    sort: [z, y, x]
+                    Map String stuff -> (Map String stuff, [signals it depends on])
+                */
+            };
+        b : {
+                x <= f(z);
+                y <= f(x);
+
+                /*
+                    dependencies:
+                    x -> [z]
+                    y -> [x]
+                    sort: [z, x, y]
+                */
+            };
+    }
+    /*
+       {
+        x -> (m -> s, [z])
+        y -> (m -> s, [z])
+       }
+       {
+        z -> (m -> s, [x])
+       }
+        drop all signals at lower level?
+
+        Map String -> (Set dependents -> Bool, Bool, result)
+    */
+}
+
+implementation: 
+func :: CtrlExpr -> [list of vars in scope] -> Either String (Map String val -> something, [vars it depends on])
 
 */
+
+STATE
+st, st2
+LABEL
+x
+
+{
+    case {
+        x==write8 : {
+            st := 0;
+            st2 := 1;
+        }
+        x==something : {
+            st := x;
+            st2 := y;
+        }
+        default :{
+            st :=
+            st2 :=
+        }
+    };
+
+    if(cond) {
+    } else {
+    };
+
+    asdgf:=8;
+}
+
+x==write8 -> "st==st2"'==false
+x==something -> ("st==st2"' == "x==y")
+
+DISJ {
+    cond && (st'==5);
+    cond2 && (st'==6);
+}
+
+
+case {
+    l==1 : {
+        a := x
+        b := b
+        c := c
+    }
+    ..
+    ....
+}
+
+a := case {
+    l==1 : x
+    default : a
+}
+
+=======
+
+signal class_event;
+signal class_arg : int;
+
+case {
+    ... : {
+        something;
+        class_event(class_arg);
+        class_Event <= true
+        class_arg <= 5;
+    }
+    ... : {
+        something else;
+        class_Event <= false
+    }
+}
+
+====OS
+
+os_st : = case {
+    os_st==waiting : {
+        case {
+            class_Event : os_done;
+            default waiting;
+        }
+    }
+}
+
+
