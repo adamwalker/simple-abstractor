@@ -1,33 +1,37 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards, PolymorphicComponents #-}
 
 module Backend where
 
 import Control.Monad
 import Control.Monad.ST.Lazy 
 import Data.Bits
+import Control.Monad.State
 
 import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
 
 import CuddExplicitDeref
 
-data AST v = T
-           | F
-           | Lit      v
-           | Not      (AST v)
-           | And      (AST v) (AST v)
-           | Or       (AST v) (AST v)
-           | Conj     [AST v]
-           | Case     [(AST v, AST v)]
-           | EqVar    [v] [v]
-           | EqConst  [v] Int
-           | Exists   (v -> AST v)
-           | Let      (AST v) (AST v -> AST v)
+data AST v c pred var = T
+                      | F
+                      | Not      (AST v c pred var)
+                      | And      (AST v c pred var) (AST v c pred var)
+                      | Or       (AST v c pred var) (AST v c pred var)
+                      | Conj     [AST v c pred var]
+                      | Case     [(AST v c pred var, AST v c pred var)]
+                      | EqVar    var var
+                      | EqConst  var Int
+                      | Pred     pred
+                      | Exists   (v -> AST v c pred var)
+                      | QuantLit v
+                      | Let      (AST v c pred var) (c -> AST v c pred var)
+                      | LetLit   c
 
-prettyPrint :: (Show v) => AST v -> Doc
+testAST = Let (And T F) (\x -> LetLit x `Or` (Exists $ \v -> LetLit x `And` QuantLit v `Or` Pred "pp"))
+
+prettyPrint :: (Show p, Show v) => AST Doc Doc p v -> Doc
 prettyPrint T             = text "True"
 prettyPrint F             = text "False"
-prettyPrint (Lit v)       = text $ pack $ show v
 prettyPrint (Not e)       = text "!" <+> prettyPrint e
 prettyPrint (And x y)     = parens $ prettyPrint x <+> text "&&" <+> prettyPrint y
 prettyPrint (Or x y)      = parens $ prettyPrint x <+> text "||" <+> prettyPrint y
@@ -37,8 +41,10 @@ prettyPrint (Case cases)  = text "case" <+> lbrace <$$> indent 4 (vcat $ map (un
     f c v = prettyPrint c <+> colon <+> prettyPrint v <+> semi
 prettyPrint (EqVar x y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
 prettyPrint (EqConst x c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
-prettyPrint (Exists func) = undefined
-prettyPrint (Let x f)     = undefined
+prettyPrint (Exists func) = text "exists" <+> parens (text "tvar") <+> lbrace <$$> indent 4 (prettyPrint $ func (text "tvar")) <$$> rbrace
+prettyPrint (QuantLit x)  = x
+prettyPrint (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint x <+> text "in" <$$> indent 4 (prettyPrint $ f (text "tmp"))
+prettyPrint (LetLit x)    = x
 
 conj :: STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
 conj m nodes = go (bone m) nodes
@@ -73,39 +79,56 @@ ccase m = go (bzero m) (bzero m)
         --alive == accum', neg'
         go accum' neg' cs
 
-compile :: STDdManager s u ->  AST (DDNode s u) -> ST s (DDNode s u)
-compile m = compile' where
+data VarOps pdb p v s u = VarOps {
+    getPred :: p -> StateT pdb (ST s) (DDNode s u),
+    getVar  :: v -> StateT pdb (ST s) [DDNode s u],
+    withTmp :: forall a. (DDNode s u -> StateT pdb (ST s) a) -> StateT pdb (ST s) a
+}
+
+compile :: STDdManager s u -> VarOps pdb p v s u -> pdb -> AST (DDNode s u) (DDNode s u) p v -> ST s (DDNode s u, pdb)
+compile m VarOps{..} pdb = flip runStateT pdb . compile' where
     compile' T             = return $ bone m
     compile' F             = return $ bzero m
-    compile' (Lit v)       = return v
     compile' (Not x)       = liftM bnot $ compile' x
     compile' (And x y)     = do
         x <- compile' x
         y <- compile' y
-        res <- band m x y 
-        deref m x
-        deref m y
+        res <- lift $ band m x y 
+        lift $ deref m x
+        lift $ deref m y
         return res
     compile' (Or x y)      = do
         x <- compile' x
         y <- compile' y
-        res <- bor m x y
-        deref m x
-        deref m y
+        res <- lift $ bor m x y
+        lift $ deref m x
+        lift $ deref m y
         return res
     compile' (Conj es)     = do
         es <- sequence $ map compile' es
-        conj m es
+        lift $ conj m es
     compile' (Case cs)     = do
         cs <- sequence $ map func cs 
-        ccase m cs
+        lift $ ccase m cs
         where
         func (x, y) = do
             x <- compile' x
             y <- compile' y
             return (x, y)
-    compile' (EqVar x y)   = xeqy m x y
-    compile' (EqConst x c) = computeCube m x $ take (length x) $ map (testBit c) [0..]
-    compile' (Exists f)    = undefined
-    compile' (Let x f)     = undefined
+    compile' (EqVar x y)   = do
+        x <- getVar x
+        y <- getVar y
+        lift $ xeqy m x y
+    compile' (EqConst x c) = do
+        x <- getVar x
+        lift $ computeCube m x $ take (length x) $ map (testBit c) [0..]
+    compile' (Pred x)      = getPred x
+    compile' (Exists f)    = withTmp $ compile' . f
+    compile' (QuantLit x)  = return x
+    compile' (Let x f)     = do
+        bind <- compile' x
+        res  <- compile' (f bind)
+        lift $ deref m bind
+        return res
+    compile' (LetLit x)    = return x
 
