@@ -1,4 +1,4 @@
-{-#LANGUAGE TupleSections, GADTs, PolymorphicComponents, RankNTypes, ImpredicativeTypes #-}
+{-#LANGUAGE TupleSections, GADTs #-}
 module Analysis where
 
 import Prelude hiding (sequence)
@@ -65,93 +65,89 @@ nsPredToString :: NSEQPred -> String
 nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "'==" ++ r ++ "\""
 nsPredToString (NsEqConst x c) = "\"" ++ x ++ "'==" ++ show c ++ "\""
 
-data ValExprToTSLRet = ValExprToTSLRet {
-    valExpTSL   :: forall v c. Map NSEQPred v -> AST v c EqPred String,
+data ValExprToTSLRet v c = ValExprToTSLRet {
+    valExpTSL   :: Map NSEQPred v -> AST v c EqPred String,
     primedPreds :: [NSEQPred],
     newPreds    :: [EqPred]
 }
 
-uncurryValExpToTSLRet :: ((forall c v. Map NSEQPred v -> AST v c EqPred String) -> [NSEQPred] -> [EqPred] -> a) -> ValExprToTSLRet -> a
+uncurryValExpToTSLRet :: ((Map NSEQPred v -> AST v c EqPred String) -> [NSEQPred] -> [EqPred] -> a) -> ValExprToTSLRet v c -> a
 uncurryValExpToTSLRet f (ValExprToTSLRet x y z) = f x y z
 
 fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
-valExprToTSL :: String -> ValExpr -> ValExprToTSLRet 
+valExprToTSL :: String -> ValExpr -> ValExprToTSLRet v c
 valExprToTSL absVar = valExprToTSL'
     where
     valExprToTSL' (StringLit var) = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar var
     valExprToTSL' (IntLit int)    = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqConst absVar int
     valExprToTSL' (CaseV cases)   = ValExprToTSLRet tsl allPreds newPreds 
         where
-        tsl :: forall c v. Map NSEQPred v -> AST v c EqPred String
         tsl mp = Case $ zip conds (map (uncurry f) (zip (map (($ mp) . valExpTSL) ccases) (map primedPreds ccases)))
             where
             f tslcase preds = Backend.Conj $ map (Backend.Not . QuantLit . flip fjml mp) (allPreds \\ preds) ++ [tslcase]
         conds  = map fst conds'
         ccases = map (valExprToTSL' . snd) cases
-        conds' :: forall c v. [(AST v c EqPred String, [EqPred])]
         conds' = map (binExpToTSL . fst) cases
         newPreds = nub $ concat $ map snd conds'
         allPreds = nub $ concat $ map primedPreds ccases
 
-data PassValTSLRet = PassValTSLRet {
-    passValTSLTSL   :: forall v c. AST v c EqPred String,
+data PassValTSLRet v c = PassValTSLRet {
+    passValTSLTSL   :: AST v c EqPred String,
     passValTSLPreds :: [EqPred],
     passValTSLInts  :: [Int],
     passValTSLVars  :: [String]
 }
 
-passValTSL :: String -> ValExpr -> Either String PassValTSLRet
+passValTSL :: String -> ValExpr -> Either String (PassValTSLRet v c)
 passValTSL var = passValTSL' 
     where
     passValTSL' (StringLit var2) = return $ PassValTSLRet (EqVar var var2) [] [] [var]
     passValTSL' (IntLit int)     = return $ PassValTSLRet (EqConst var int) [] [int] []
     passValTSL' (CaseV cases)    = f <$> sequence recs
         where
-        conds :: forall c v. [(AST v c EqPred String, [EqPred])]
         conds  = map (binExpToTSL . fst) cases
         recs   = map (passValTSL' . snd) cases
         f recs = PassValTSLRet tsl preds ints vars
             where
-            tsl :: forall c v. AST v c EqPred String
             tsl   = Case $ zip (map fst conds) (map passValTSLTSL recs) 
             preds = nub $ concat $ map snd conds ++ map passValTSLPreds recs
             ints  = nub $ concat $ map passValTSLInts recs
             vars  = nub $ concat $ map passValTSLVars recs
 
-data Abs1Return = Abs1Return {
-    abs1Tsl       :: forall c v. Map NSEQPred v -> AST v c EqPred String,
+data Abs1Return v c = Abs1Return {
+    abs1Tsl       :: Map NSEQPred v -> AST v c EqPred String,
     abs1Preds     :: [NSEQPred],
     abs1newPreds  :: [EqPred]
 }
 
-data Abs2Return = Abs2Return {
-    abs2Tsl   :: forall v c. AST v c EqPred String,
+data Abs2Return v c = Abs2Return {
+    abs2Tsl   :: AST v c EqPred String,
     abs2Preds :: [EqPred]
 }
 
-data PassThroughReturn = PassThroughReturn {
-    passTSL   :: forall v c. AST v c EqPred String,
+data PassThroughReturn v c = PassThroughReturn {
+    passTSL   :: AST v c EqPred String,
     passPreds :: [EqPred],
     passInts  :: [Int],
     passVars  :: [String]
 }
 
-data SignalReturn = SignalReturn {
-    sigPassTSL :: PassThroughReturn,
-    sigAbs1    :: Abs1Return
+data SignalReturn v c = SignalReturn {
+    sigPassTSL :: PassThroughReturn v c,
+    sigAbs1    :: Abs1Return v c
 }
 
-data Return = Return {
+data Return v c = Return {
     varsRet :: [String],
-    abs1Ret :: String -> Abs1Return,
-    abs2Ret :: String -> String -> Abs2Return,
-    passRet :: String -> Either String PassThroughReturn
+    abs1Ret :: String -> Abs1Return v c,
+    abs2Ret :: String -> String -> Abs2Return v c,
+    passRet :: String -> Either String (PassThroughReturn v c)
 }
 
-abstract :: CtrlExpr -> Either String Return
+abstract :: CtrlExpr -> Either String (Return v c)
 abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass
     where
     abs1 = error "abs1 called on signal"
@@ -180,25 +176,21 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
         caseabs1s  = map abs1Ret subcases
         caseabs2s  = map abs2Ret subcases
         casePasses = map passRet subcases
-        conds :: forall c v. [(AST v c EqPred String, [EqPred])]
         conds = map (binExpToTSL . fst) cases
         abs1 absVar 
             | absVar `elem` hd = Abs1Return tsl preds (nub $ concat (map snd conds') ++ concat (map abs1newPreds abs1ress))
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
                 where
                 abs1ress = map ($ absVar) caseabs1s
-                tsl :: forall c v. Map NSEQPred v -> AST v c EqPred String
                 tsl mp = Backend.Case $ zip (map fst conds') $ map (uncurry f . (abs1Tsl &&& abs1Preds))  abs1ress
                     where
                     f tslcase preds = Backend.Conj $ map (Backend.Not . QuantLit . flip fjml mp) (allPreds \\ preds) ++ [tslcase mp]
-                conds' :: forall c v. [(AST v c EqPred String, [EqPred])]
                 conds' = map (binExpToTSL . fst) cases
                 allPreds = nub $ concat $ map abs1Preds abs1ress
                 preds = nub $ concat $ map abs1Preds abs1ress
         abs2 lv rv = Abs2Return tsl preds
             where
             rec = map (($ lv) >>> ($ rv)) caseabs2s
-            tsl :: forall c v. AST v c EqPred String
             tsl = Backend.Case $ zip (map fst conds) (map abs2Tsl rec)
             preds = nub $ concat $ map abs2Preds rec ++ map snd conds
         pass var = f <$> sequence rec
@@ -213,10 +205,10 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
         varsAssigned = map varsRet rres
         allVars  = concat varsAssigned
         theMap = createTheMap $ zip varsAssigned rres
-        createTheMap :: [([String], Return)] -> Map String (Int, Return)
+        createTheMap :: [([String], Return v c)] -> Map String (Int, Return v c)
         createTheMap things = Map.unions $ map (uncurry f) (zipWith g things [0..])
             where
-            f :: [String] -> (Int, Return) -> Map String (Int, Return)
+            f :: [String] -> (Int, Return v c) -> Map String (Int, Return v c)
             f vars func = Map.fromList (map (,func) vars)
             g :: (a, b) -> c -> (a, (c, b))
             g (x, y) z = (x, (z, y))
@@ -232,8 +224,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             rabs1ret = abs1Ret (snd rres) rv
             lres = getRet lv
             rres = getRet rv
-            tsl :: forall c v. AST v c EqPred String
-            EqualityValueRet tsl newPreds = equalityValue lv rv labs1ret rabs1ret
+            (tsl, newPreds) = equalityValue lv rv labs1ret rabs1ret
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
 
 doExists :: (Ord a) => [a] -> (Map a v -> AST v c x y) -> AST v c x y
@@ -245,29 +236,19 @@ doExists vars func = doExists' vars Map.empty
 toQV :: NSEQPred -> Map NSEQPred v -> AST v c EqPred String
 toQV nsp mp = QuantLit $ fjml nsp mp
 
-data EqualityValueRet = EqualityValueRet {
-    eqTSL :: forall c v. AST v c EqPred String,
-    preds :: [EqPred]
-}
-
-equalityValue :: String -> String -> Abs1Return -> Abs1Return -> EqualityValueRet 
-equalityValue lv rv labs1ret rabs1ret = EqualityValueRet tsl newPreds
+equalityValue :: String -> String -> Abs1Return v c -> Abs1Return v c -> (AST v c EqPred String, [EqPred])
+equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
     where
-    tsl        :: forall c v. AST v c EqPred String
     tsl        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret mp, abs1Tsl rabs1ret mp, theExpr mp])
     newPreds   = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
     allPreds   = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
-    theExpr    :: forall c v. Map NSEQPred v -> AST v c EqPred String
     theExpr mp = XNor (Backend.Pred $ constructVarPred lv rv) (Backend.Disj (map Backend.Conj (map (map ($ mp)) tsls)))
     cartProd   = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
-    tsls       :: [[forall c v. Map NSEQPred v -> AST v c EqPred String]]
     (tsls, preds) = unzip $ map (uncurry func) cartProd
         where
-        func :: forall c v. NSEQPred -> NSEQPred -> ([forall c v. Map NSEQPred v -> AST v c EqPred String], Maybe EqPred)
         func p1 p2 = ([toQV p1, toQV p2, const tsl], pred) 
             where
             (tsl, pred) = func' p1 p2
-            func' :: NSEQPred -> NSEQPred -> (forall c v. AST v c EqPred String, Maybe EqPred)
             func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   
                 | r1==r2    = (T, Nothing)
                 | otherwise = (Backend.Pred pred, Just pred) where pred = constructVarPred r1 r2
