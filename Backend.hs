@@ -17,7 +17,10 @@ data AST v c pred var = T
                       | Not      (AST v c pred var)
                       | And      (AST v c pred var) (AST v c pred var)
                       | Or       (AST v c pred var) (AST v c pred var)
+                      | Imp      (AST v c pred var) (AST v c pred var)
+                      | XNor     (AST v c pred var) (AST v c pred var)
                       | Conj     [AST v c pred var]
+                      | Disj     [AST v c pred var]
                       | Case     [(AST v c pred var, AST v c pred var)]
                       | EqVar    var var
                       | EqConst  var Int
@@ -33,9 +36,12 @@ prettyPrint :: (Show p, Show v) => AST Doc Doc p v -> Doc
 prettyPrint T             = text "True"
 prettyPrint F             = text "False"
 prettyPrint (Not e)       = text "!" <+> prettyPrint e
-prettyPrint (And x y)     = parens $ prettyPrint x <+> text "&&" <+> prettyPrint y
-prettyPrint (Or x y)      = parens $ prettyPrint x <+> text "||" <+> prettyPrint y
+prettyPrint (And x y)     = parens $ prettyPrint x <+> text "&&"  <+> prettyPrint y
+prettyPrint (Or x y)      = parens $ prettyPrint x <+> text "||"  <+> prettyPrint y
+prettyPrint (Imp x y)     = parens $ prettyPrint x <+> text "->"  <+> prettyPrint y
+prettyPrint (XNor x y)    = parens $ prettyPrint x <+> text "<->" <+> prettyPrint y
 prettyPrint (Conj es)     = text "CONJ" <+> lbrace <$$> indent 4 (vcat $ map ((<> semi) . prettyPrint) es) <$$> rbrace
+prettyPrint (Disj es)     = text "Disj" <+> lbrace <$$> indent 4 (vcat $ map ((<> semi) . prettyPrint) es) <$$> rbrace
 prettyPrint (Case cases)  = text "case" <+> lbrace <$$> indent 4 (vcat $ map (uncurry f) cases) <$$> rbrace
     where
     f c v = prettyPrint c <+> colon <+> prettyPrint v <+> semi
@@ -46,15 +52,18 @@ prettyPrint (QuantLit x)  = x
 prettyPrint (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint x <+> text "in" <$$> indent 4 (prettyPrint $ f (text "tmp"))
 prettyPrint (LetLit x)    = x
 
-conj :: STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
-conj m nodes = go (bone m) nodes
+block :: (STDdManager s u -> DDNode s u -> DDNode s u -> ST s (DDNode s u)) -> STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
+block func m nodes = go (bone m) nodes
     where
     go accum []     = return accum
     go accum (n:ns) = do
-        accum' <- band m accum n
+        accum' <- func m accum n
         deref m accum
         deref m n
         go accum' ns
+
+conj = block band
+disj = block bor
 
 ccase :: STDdManager s u -> [(DDNode s u, DDNode s u)] -> ST s (DDNode s u)
 ccase m = go (bzero m) (bzero m)
@@ -104,9 +113,26 @@ compile m VarOps{..} pdb = flip runStateT pdb . compile' where
         lift $ deref m x
         lift $ deref m y
         return res
+    compile' (XNor x y)      = do
+        x <- compile' x
+        y <- compile' y
+        res <- lift $ bxnor m x y
+        lift $ deref m x
+        lift $ deref m y
+        return res
+    compile' (Imp x y)      = do
+        x <- compile' x
+        y <- compile' y
+        res <- lift $ bor m (bnot x) y
+        lift $ deref m x
+        lift $ deref m y
+        return res
     compile' (Conj es)     = do
         es <- sequence $ map compile' es
         lift $ conj m es
+    compile' (Disj es)     = do
+        es <- sequence $ map compile' es
+        lift $ disj m es
     compile' (Case cs)     = do
         cs <- sequence $ map func cs 
         lift $ ccase m cs
