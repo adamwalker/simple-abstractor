@@ -10,7 +10,7 @@ import Control.Monad.State
 import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
 
-import CuddExplicitDeref
+--import CuddExplicitDeref
 
 data AST v c pred var = T
                       | F
@@ -33,25 +33,31 @@ data AST v c pred var = T
 testAST = Let (And T F) (\x -> LetLit x `Or` (Exists $ \v -> LetLit x `And` QuantLit v `Or` Pred "pp"))
 
 prettyPrint :: (Show p, Show v) => AST Doc Doc p v -> Doc
-prettyPrint T             = text "True"
-prettyPrint F             = text "False"
-prettyPrint (Not e)       = text "!" <+> prettyPrint e
-prettyPrint (And x y)     = parens $ prettyPrint x <+> text "&&"  <+> prettyPrint y
-prettyPrint (Or x y)      = parens $ prettyPrint x <+> text "||"  <+> prettyPrint y
-prettyPrint (Imp x y)     = parens $ prettyPrint x <+> text "->"  <+> prettyPrint y
-prettyPrint (XNor x y)    = parens $ prettyPrint x <+> text "<->" <+> prettyPrint y
-prettyPrint (Conj es)     = text "CONJ" <+> lbrace <$$> indent 4 (vcat $ map ((<> semi) . prettyPrint) es) <$$> rbrace
-prettyPrint (Disj es)     = text "Disj" <+> lbrace <$$> indent 4 (vcat $ map ((<> semi) . prettyPrint) es) <$$> rbrace
-prettyPrint (Case cases)  = text "case" <+> lbrace <$$> indent 4 (vcat $ map (uncurry f) cases) <$$> rbrace
+prettyPrint = prettyPrint' 0
     where
-    f c v = prettyPrint c <+> colon <+> prettyPrint v <+> semi
-prettyPrint (EqVar x y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
-prettyPrint (EqConst x c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
-prettyPrint (Exists func) = text "exists" <+> parens (text "tvar") <+> lbrace <$$> indent 4 (prettyPrint $ func (text "tvar")) <$$> rbrace
-prettyPrint (QuantLit x)  = x
-prettyPrint (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint x <+> text "in" <$$> indent 4 (prettyPrint $ f (text "tmp"))
-prettyPrint (LetLit x)    = x
+    prettyPrint' ng = prettyPrint''
+        where
+        prettyPrint'' T             = text "True"
+        prettyPrint'' F             = text "False"
+        prettyPrint'' (Not e)       = text "!" <+> prettyPrint'' e
+        prettyPrint'' (And x y)     = parens $ prettyPrint'' x <+> text "&&"  <+> prettyPrint'' y
+        prettyPrint'' (Or x y)      = parens $ prettyPrint'' x <+> text "||"  <+> prettyPrint'' y
+        prettyPrint'' (Imp x y)     = parens $ prettyPrint'' x <+> text "->"  <+> prettyPrint'' y
+        prettyPrint'' (XNor x y)    = parens $ prettyPrint'' x <+> text "<->" <+> prettyPrint'' y
+        prettyPrint'' (Conj es)     = text "CONJ" <+> lbrace <$$> indent 4 (vcat $ map ((<> semi) . prettyPrint'') es) <$$> rbrace
+        prettyPrint'' (Disj es)     = text "Disj" <+> lbrace <$$> indent 4 (vcat $ map ((<> semi) . prettyPrint'') es) <$$> rbrace
+        prettyPrint'' (Case cases)  = text "case" <+> lbrace <$$> indent 4 (vcat $ map (uncurry f) cases) <$$> rbrace
+            where  
+            f c v =   prettyPrint'' c <+> colon <+> prettyPrint'' v <+> semi
+        prettyPrint'' (EqVar x y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
+        prettyPrint'' (EqConst x c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (Pred x)      = parens $ text $ pack $ "predicate: " ++ show x
+        prettyPrint'' (Exists func) = text "exists" <+> parens (text $ pack $ "tvar" ++ show ng) <+> lbrace <$$> indent 4 (prettyPrint' (ng + 1)$ func (text $ pack $ "tvar" ++ show ng)) <$$> rbrace
+        prettyPrint'' (QuantLit x)  = x
+        prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
+        prettyPrint'' (LetLit x)    = x
 
+{-
 block :: (STDdManager s u -> DDNode s u -> DDNode s u -> ST s (DDNode s u)) -> STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
 block func m nodes = go (bone m) nodes
     where
@@ -157,4 +163,4 @@ compile m VarOps{..} pdb = flip runStateT pdb . compile' where
         lift $ deref m bind
         return res
     compile' (LetLit x)    = return x
-
+-}
