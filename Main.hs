@@ -9,8 +9,8 @@ import Text.Parsec hiding ((<|>))
 
 import Parser
 import Analysis
-import TSLPP
 import Predicate
+import Backend
 
 main = do
     [fname, l, r] <- getArgs
@@ -40,6 +40,4 @@ main = do
                             print preds
                             print ints
                             print vars
-                    let Abs1Return tsl preds newPreds = abs1 "os_st"
-                    putDoc $ prettyPrint tsl
                             
