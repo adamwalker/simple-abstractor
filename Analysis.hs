@@ -115,9 +115,9 @@ data PassValTSLRet f v c = PassValTSLRet {
 passValTSL :: ValExpr (Either VarInfo Int) -> Either String (PassValTSLRet f v c)
 passValTSL = passValTSL' 
     where
-    passValTSL' (Lit (Left (VarInfo var (NonAbs _) sect))) = return $ PassValTSLRet (\v -> EqVar (Left v) (var, StateSection)) [] [] [var]
+    passValTSL' (Lit (Left (VarInfo var (NonAbs _) sect))) = return $ PassValTSLRet (\v -> Backend.EqVar (Left v) (var, StateSection)) [] [] [var]
     passValTSL' (Lit (Left (VarInfo var Abs sect)))        = error "passValTSL: abstracted variable"
-    passValTSL' (Lit (Right int)) = return $ PassValTSLRet (\v -> EqConst (Left v) int) [] [int] []
+    passValTSL' (Lit (Right int)) = return $ PassValTSLRet (\v -> Backend.EqConst (Left v) int) [] [int] []
     passValTSL' (CaseV cases)     = f <$> sequence recs
         where
         conds  = map (binExpToTSL . fst) cases

@@ -3,7 +3,7 @@ module Predicate (
     constructVarPred, 
     constructConstPred,
     getPred,
-    EqPred,
+    EqPred(..),
     PredEither,
     NSEQPred(..),
     consistencyPreds,

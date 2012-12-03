@@ -23,7 +23,7 @@ main = do
     let res =  parse top "" fres
     case res of 
         Left err -> print err
-        Right (Spec sdecls ldecls ress) -> do
+        Right (Spec sdecls ldecls init goal ress) -> do
             let theMap = doDecls sdecls ldecls
             case resolve theMap ress of
                 Left err -> putStrLn err

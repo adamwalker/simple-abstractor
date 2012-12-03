@@ -10,7 +10,7 @@ import Control.Monad.State
 import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
 
---import CuddExplicitDeref
+import CuddExplicitDeref
 
 data AST f v c pred var = T
                       | F
@@ -59,7 +59,6 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
         prettyPrint'' (LetLit x)    = x
 
-{-
 block :: (STDdManager s u -> DDNode s u -> DDNode s u -> ST s (DDNode s u)) -> STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
 block func m nodes = go (bone m) nodes
     where
@@ -102,8 +101,8 @@ data VarOps pdb p v s u = VarOps {
     withTmp :: forall a. (DDNode s u -> StateT pdb (ST s) a) -> StateT pdb (ST s) a
 }
 
-compile :: STDdManager s u -> VarOps pdb p v s u -> pdb -> AST (DDNode s u) (DDNode s u) p v -> ST s (DDNode s u, pdb)
-compile m VarOps{..} pdb = flip runStateT pdb . compile' where
+compile :: STDdManager s u -> VarOps pdb p v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) p v -> StateT pdb (ST s) (DDNode s u)
+compile m VarOps{..} = compile' where
     compile' T             = return $ bone m
     compile' F             = return $ bzero m
     compile' (Not x)       = liftM bnot $ compile' x
@@ -150,11 +149,11 @@ compile m VarOps{..} pdb = flip runStateT pdb . compile' where
             y <- compile' y
             return (x, y)
     compile' (EqVar x y)   = do
-        x <- getVar x
+        x <- either return getVar x
         y <- getVar y
         lift $ xeqy m x y
     compile' (EqConst x c) = do
-        x <- getVar x
+        x <- either return getVar x
         lift $ computeCube m x $ take (length x) $ map (testBit c) [0..]
     compile' (Pred x)      = getPred x
     compile' (Exists f)    = withTmp $ compile' . f
@@ -165,4 +164,4 @@ compile m VarOps{..} pdb = flip runStateT pdb . compile' where
         lift $ deref m bind
         return res
     compile' (LetLit x)    = return x
--}
+

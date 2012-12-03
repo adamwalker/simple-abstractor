@@ -11,6 +11,8 @@ import Predicate
 data Spec = Spec {
     stateDecls :: [Decl],
     labelDecls :: [Decl],
+    init       :: BinExpr (Either String Int),
+    goal       :: BinExpr (Either String Int),
     trans      :: CtrlExpr String (Either String Int)
 }
 
