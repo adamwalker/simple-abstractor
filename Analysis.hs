@@ -46,11 +46,11 @@ absBOpToTSLBOp AST.Or  = Backend.Or
 --decision
 handleValPred :: ValExpr (Either VarInfo Int)  -> ValExpr (Either VarInfo Int) -> (AST f v c Predicate.Pred Predicate.Var, [EqPred])
 handleValPred (Lit (Left (VarInfo x Abs sect)))         (Lit (Right y)) = (Backend.Pred (pred, sect), [pred]) where pred = constructConstPred x y
-handleValPred (Lit (Left (VarInfo x (NonAbs _) sect)))  (Lit (Right y)) = (Backend.EqConst (Right (x, sect)) y, []) 
+handleValPred (Lit (Left (VarInfo x (NonAbs sz) sect)))  (Lit (Right y)) = (Backend.EqConst (Right (x, sect, sz)) y, []) 
 handleValPred (Lit (Right y)) (Lit (Left (VarInfo x Abs sect)))         = (Backend.Pred (pred, sect), [pred]) where pred = constructConstPred x y
-handleValPred (Lit (Right y)) (Lit (Left (VarInfo x (NonAbs _) sect)))  = (Backend.EqConst (Right (x, sect)) y, []) 
+handleValPred (Lit (Right y)) (Lit (Left (VarInfo x (NonAbs sz) sect)))  = (Backend.EqConst (Right (x, sect, sz)) y, []) 
 handleValPred (Lit (Left (VarInfo x Abs sect1))) (Lit (Left (VarInfo y Abs sect2)))               = (Backend.Pred (pred, effectiveSection sect1 sect2), [pred]) where pred = constructVarPred x y
-handleValPred (Lit (Left (VarInfo x (NonAbs _) sect1))) (Lit (Left (VarInfo y (NonAbs _) sect2))) = (Backend.EqVar (Right (x, sect1)) (y, sect2), []) 
+handleValPred (Lit (Left (VarInfo x (NonAbs sz1) sect1))) (Lit (Left (VarInfo y (NonAbs sz2) sect2))) = (Backend.EqVar (Right (x, sect1, sz1)) (y, sect2, sz1), []) 
 handleValPred (Lit (Left _))  (Lit (Left _))  = error "handleValPred: Attempted to compare pred var and non-pred var"
 handleValPred (Lit (Right x)) (Lit (Right y)) = (if' (x==y) T F, [])
 {-
@@ -115,7 +115,7 @@ data PassValTSLRet f v c = PassValTSLRet {
 passValTSL :: ValExpr (Either VarInfo Int) -> Either String (PassValTSLRet f v c)
 passValTSL = passValTSL' 
     where
-    passValTSL' (Lit (Left (VarInfo var (NonAbs _) sect))) = return $ PassValTSLRet (\v -> Backend.EqVar (Left v) (var, StateSection)) [] [] [var]
+    passValTSL' (Lit (Left (VarInfo var (NonAbs sz) sect))) = return $ PassValTSLRet (\v -> Backend.EqVar (Left v) (var, sect, sz)) [] [] [var]
     passValTSL' (Lit (Left (VarInfo var Abs sect)))        = error "passValTSL: abstracted variable"
     passValTSL' (Lit (Right int)) = return $ PassValTSLRet (\v -> Backend.EqConst (Left v) int) [] [int] []
     passValTSL' (CaseV cases)     = f <$> sequence recs

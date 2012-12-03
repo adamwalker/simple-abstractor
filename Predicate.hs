@@ -23,7 +23,7 @@ import Data.Map (Map)
 import Safe
 import Data.Maybe
 
-type Var  = (String, Section)
+type Var  = (String, Section, Int)
 type Pred = (EqPred, Section)
 
 effectiveSection :: Section -> Section -> Section

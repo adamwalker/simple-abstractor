@@ -8,6 +8,14 @@ LABEL
 class_lba_low, write8_arg, read_req_lba_low_arg, read_req_lba_hi_arg : abs;
 cont, ctag, addr, class_sect_written, utag                           : nonabs 5;
 
+INIT
+
+dev_st==0 && os_st==0
+
+GOAL
+
+os_st==0
+
 TRANS
 {
     dev_lba_low := case {
