@@ -6,7 +6,8 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Data.Map (Map)
 
-import Text.PrettyPrint.Leijen.Text (putDoc)
+import Data.Text.Lazy hiding (intercalate, map, take, length)
+import Text.PrettyPrint.Leijen.Text (putDoc, text)
 import Text.Parsec hiding ((<|>))
 
 import Parser
@@ -34,7 +35,7 @@ main = do
                             print vars
                             putStrLn "\n"
                             let res = abs2 l r 
-                            putDoc $ prettyPrint $ abs2Tsl res
+                            putDoc $ prettyPrint $ (abs2Tsl res) (text (pack ("NSPred: " ++ l ++ " == " ++ r)))
                             putStrLn "\n"
                             print $ abs2Preds res
                             let tuples = consistencyPreds $ (catMaybes $ map toVarPair $ abs2Preds res) ++ [("os_lba_hi","read_req_lba_hi_arg")]

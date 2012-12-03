@@ -137,7 +137,7 @@ data Abs1Return v c = Abs1Return {
 }
 
 data Abs2Return v c = Abs2Return {
-    abs2Tsl   :: AST v c Predicate.Pred Predicate.Var,
+    abs2Tsl   :: v -> AST v c Predicate.Pred Predicate.Var,
     abs2Preds :: [EqPred]
 }
 
@@ -204,7 +204,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
         abs2 lv rv = Abs2Return tsl preds
             where
             rec = map (($ lv) >>> ($ rv)) caseabs2s
-            tsl = Backend.Case $ zip (map fst conds) (map abs2Tsl rec)
+            tsl v = Backend.Case $ zip (map fst conds) (map (($ v) . abs2Tsl) rec)
             preds = nub $ concat $ map abs2Preds rec ++ map snd conds
         pass var = f <$> sequence rec
             where
@@ -249,14 +249,14 @@ doExists vars func = doExists' vars Map.empty
 toQV :: NSEQPred -> Map NSEQPred v -> AST v c Predicate.Pred Predicate.Var
 toQV nsp mp = QuantLit $ fjml nsp mp
 
-equalityValue :: String -> String -> Abs1Return v c -> Abs1Return v c -> (AST v c Predicate.Pred Predicate.Var, [EqPred])
+equalityValue :: String -> String -> Abs1Return v c -> Abs1Return v c -> (v -> AST v c Predicate.Pred Predicate.Var, [EqPred])
 equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
     where
-    tsl        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret mp, abs1Tsl rabs1ret mp, theExpr mp])
-    newPreds   = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
-    allPreds   = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
-    theExpr mp = XNor (Backend.Pred (constructVarPred lv rv, StateSection)) (Backend.Disj (map Backend.Conj (map (map ($ mp)) tsls)))
-    cartProd   = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
+    tsl v        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret mp, abs1Tsl rabs1ret mp, theExpr v mp])
+    newPreds     = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
+    allPreds     = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
+    theExpr v mp = XNor (Backend.QuantLit v) (Backend.Disj (map Backend.Conj (map (map ($ mp)) tsls)))
+    cartProd     = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
     (tsls, preds) = unzip $ map (uncurry func) cartProd
         where
         func p1 p2 = ([toQV p1, toQV p2, const tsl], pred) 
@@ -279,3 +279,4 @@ eqConstraintTSL x y z = Backend.Conj $ [func x y z, func y z x, func z x y]
 
 constraintSection :: [(String, String, String)] -> AST v c Predicate.Pred Predicate.Var
 constraintSection x = Backend.Conj $ map (uncurryN eqConstraintTSL) x
+
