@@ -37,11 +37,11 @@ absBOpToTSLBOp AST.Or  = Backend.Or
 --Takes two value expressions and returns the backend code that states that
 --they are equal and the new predicates that are required to make this
 --decision
-handleValPred :: ValExpr -> ValExpr -> (AST v c EqPred String, [EqPred])
-handleValPred (StringLit x) (IntLit    y) = (Backend.Pred pred, [pred]) where pred = constructConstPred x y
-handleValPred (IntLit    x) (StringLit y) = (Backend.Pred pred, [pred]) where pred = constructConstPred y x
-handleValPred (StringLit x) (StringLit y) = (Backend.Pred pred, [pred]) where pred = constructVarPred x y
-handleValPred (IntLit    x) (IntLit    y) = (if' (x==y) T F, [])
+handleValPred :: ValExpr (Either String Int)  -> ValExpr (Either String Int) -> (AST v c EqPred String, [EqPred])
+handleValPred (Lit (Left x))  (Lit (Right y)) = (Backend.Pred pred, [pred]) where pred = constructConstPred x y
+handleValPred (Lit (Right x)) (Lit (Left y))  = (Backend.Pred pred, [pred]) where pred = constructConstPred y x
+handleValPred (Lit (Left x))  (Lit (Left y))  = (Backend.Pred pred, [pred]) where pred = constructVarPred x y
+handleValPred (Lit (Right x)) (Lit (Right y)) = (if' (x==y) T F, [])
 {-
 handleValPred l r                         = equalityValue "anon1" "anon2" (uncurryValExpToTSLRet Abs1Return lr) (uncurryValExpToTSLRet Abs1Return rr)
     where
@@ -49,7 +49,7 @@ handleValPred l r                         = equalityValue "anon1" "anon2" (uncur
     rr = valExprToTSL "anon2" r
     -}
 
-binExpToTSL :: BinExpr -> (AST v c EqPred String, [EqPred])
+binExpToTSL :: BinExpr (Either String Int) -> (AST v c EqPred String, [EqPred])
 binExpToTSL TrueE                  = (T, [])
 binExpToTSL FalseE                 = (F, [])
 binExpToTSL (AST.Not x)            = (Backend.Not (fst rec), snd rec) where rec = binExpToTSL x
@@ -59,7 +59,6 @@ binExpToTSL (Bin op x y)           = (absBOpToTSLBOp op (fst lr) (fst rr), nub $
                                         rr = binExpToTSL y
 binExpToTSL (AST.Pred AST.Eq x y)  = handleValPred x y
 binExpToTSL (AST.Pred AST.Neq x y) = (Backend.Not $ fst r, snd r) where r = handleValPred x y
-binExpToTSL (Atom ident)           = (EqConst ident 0, [constructConstPred ident 0])
 
 nsPredToString :: NSEQPred -> String
 nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "'==" ++ r ++ "\""
@@ -78,12 +77,12 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
-valExprToTSL :: String -> ValExpr -> ValExprToTSLRet v c
+valExprToTSL :: String -> ValExpr (Either String Int) -> ValExprToTSLRet v c
 valExprToTSL absVar = valExprToTSL'
     where
-    valExprToTSL' (StringLit var) = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar var
-    valExprToTSL' (IntLit int)    = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqConst absVar int
-    valExprToTSL' (CaseV cases)   = ValExprToTSLRet tsl allPreds newPreds 
+    valExprToTSL' (Lit (Left var))  = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar var
+    valExprToTSL' (Lit (Right int)) = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqConst absVar int
+    valExprToTSL' (CaseV cases)     = ValExprToTSLRet tsl allPreds newPreds 
         where
         tsl mp = Case $ zip conds (map (uncurry f) (zip (map (($ mp) . valExpTSL) ccases) (map primedPreds ccases)))
             where
@@ -101,12 +100,12 @@ data PassValTSLRet v c = PassValTSLRet {
     passValTSLVars  :: [String]
 }
 
-passValTSL :: String -> ValExpr -> Either String (PassValTSLRet v c)
+passValTSL :: String -> ValExpr (Either String Int) -> Either String (PassValTSLRet v c)
 passValTSL var = passValTSL' 
     where
-    passValTSL' (StringLit var2) = return $ PassValTSLRet (EqVar var var2) [] [] [var]
-    passValTSL' (IntLit int)     = return $ PassValTSLRet (EqConst var int) [] [int] []
-    passValTSL' (CaseV cases)    = f <$> sequence recs
+    passValTSL' (Lit (Left var2)) = return $ PassValTSLRet (EqVar var var2) [] [] [var]
+    passValTSL' (Lit (Right int)) = return $ PassValTSLRet (EqConst var int) [] [int] []
+    passValTSL' (CaseV cases)     = f <$> sequence recs
         where
         conds  = map (binExpToTSL . fst) cases
         recs   = map (passValTSL' . snd) cases
@@ -147,7 +146,7 @@ data Return v c = Return {
     passRet :: String -> Either String (PassThroughReturn v c)
 }
 
-abstract :: CtrlExpr -> Either String (Return v c)
+abstract :: CtrlExpr String (Either String Int) -> Either String (Return v c)
 abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass
     where
     abs1 = error "abs1 called on signal"

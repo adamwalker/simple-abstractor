@@ -14,17 +14,17 @@ read_req_lba_low_arg, read_req_lba_hi_arg
 */
 {
     dev_lba_low := case {
-        cont && ctag==0 && addr==0 : write8_arg;
+        cont==1 && ctag==0 && addr==0 : write8_arg;
         true                       : os_lba_low;
     };
 
     dev_lba_hi := case {
-        cont && ctag==0 && addr==1 : dev_lba_low;
+        cont==1 && ctag==0 && addr==1 : dev_lba_low;
         true                       : dev_lba_hi;
     };
 
     dev_sect := case {
-        cont && ctag==0 && addr==2 : write8_arg;
+        cont==1 && ctag==0 && addr==2 : write8_arg;
         true                       : dev_sect;
     };
 
@@ -35,42 +35,42 @@ read_req_lba_low_arg, read_req_lba_hi_arg
     will introduce preds such as write8arg==udma_m1 etc
 
     dev_sect_finite := case {
-        cont && ctag==0 && addr==2 : write8_arg_dev_sect_fin;
+        cont==1 && ctag==0 && addr==2 : write8_arg_dev_sect_fin;
         true                       : dev_sect_finite;
     };
 
     */
 
     os_lba_low := case {
-        !cont && utag==0 : read_req_lba_low_arg;
+        cont==0 && utag==0 : read_req_lba_low_arg;
         true             : os_lba_low;
     };
 
     os_lba_hi := case {
-        !cont && utag==0 : read_req_lba_hi_arg;
+        cont==0 && utag==0 : read_req_lba_hi_arg;
         true             : os_lba_hi;
     };
 
     dev_st := case {
         dev_st==0 : case {
-            cont && ctag==1 && addr==3  : 1;
-            !cont && utag==1            : 2; //dev_impossible
+            cont==1 && ctag==1 && addr==3  : 1;
+            cont==0 && utag==1            : 2; //dev_impossible
             true                        : 0;
         };
         dev_st==1 : case {
-            !cont && utag==1            : 0;
+            cont==0 && utag==1            : 0;
             true                        : 1;
         };
     };
 
     class_udma_mode_set := case {
-        dev_st==0 && cont && ctag==1 && addr==4 : 1;
+        dev_st==0 && cont==1 && ctag==1 && addr==4 : 1;
         true                                    : 0;
     };
 
     class_udma_mode_val <= dev_sect;
 
-    class_sect_written <= if(utag==1){1}else{0};
+    //class_sect_written <= if(utag==1){1}else{0};
     class_lba_low <= dev_lba_low;
 
     /*
@@ -91,13 +91,13 @@ read_req_lba_low_arg, read_req_lba_hi_arg
 
     os_st := case {
         os_st==0 : case {
-            !cont && class_sect_written : 2; //error
-            !cont && utag==2            : 1;
+            cont==0 && class_sect_written==1 : 2; //error
+            cont==0 && utag==2            : 1;
             true                        : 0;
         };
         os_st==1 : case {
-            !cont && class_sect_written && class_lba_low!=os_lba_low : 2;
-            !cont && class_sect_written && class_lba_low==os_lba_low : 0;
+            cont==0 && class_sect_written==1 && class_lba_low!=os_lba_low : 2;
+            cont==0 && class_sect_written==1 && class_lba_low==os_lba_low : 0;
             true                                                     : 1;
         };
    };

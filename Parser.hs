@@ -37,7 +37,6 @@ term =   parens binExpr
      <|> TrueE <$ reserved "true" 
      <|> FalseE <$ reserved "false"
      <|> try predicate
-     <|> Atom <$> identifier
      <?> "simple expression"
 
 table = [[prefix "!"  Not]
@@ -52,16 +51,14 @@ prefix name fun       = Prefix (fun <$ reservedOp name)
 assign   = Assign <$> identifier <* reservedOp ":=" <*> valExpr
 signal   = Signal <$> identifier <* reservedOp "<=" <*> valExpr
 ccase    = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> ctrlExpr) semi)
-cif      = IfC    <$  reserved "if" <*> parens binExpr <*> braces ctrlExpr <* reserved "else" <*> braces ctrlExpr
 conj     = Conj   <$> braces (sepEndBy ctrlExpr semi)
-ctrlExpr = conj <|> ccase <|> cif <|> try assign <|> signal
+ctrlExpr = conj <|> ccase <|> try assign <|> signal
 
 --Value expressions
-stringLit = StringLit <$> identifier
-intLit    = IntLit . fromIntegral <$> integer
-vcase     = CaseV     <$ reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> valExpr) semi)
-vif       = IfV       <$ reserved "if" <*> parens binExpr <*> braces valExpr <* reserved "else" <*> braces valExpr
-valExpr   = vif <|> vcase <|> intLit <|> stringLit
+lit       = Lit   <$> ((Left <$> identifier) <|> ((Right . fromIntegral) <$> integer))
+vcase     = CaseV <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> valExpr) semi)
+valExpr   = vcase <|> lit
 
+top :: Parser (CtrlExpr String (Either String Int))
 top = whiteSpace *> ctrlExpr <* eof
 

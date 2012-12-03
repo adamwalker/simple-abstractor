@@ -1,30 +1,38 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 module AST where
 
-data CtrlExpr where
-    Assign :: String -> ValExpr                -> CtrlExpr
-    Signal :: String -> ValExpr                -> CtrlExpr
-    CaseC  :: [(BinExpr, CtrlExpr)]            -> CtrlExpr
-    IfC    :: BinExpr -> CtrlExpr -> CtrlExpr  -> CtrlExpr
-    Conj   :: [CtrlExpr]                       -> CtrlExpr
-    deriving (Show)
+import Data.Functor
+import Data.Foldable
+import Data.Traversable
 
-data ValExpr where
-    StringLit :: String                        -> ValExpr
-    IntLit    :: Int                           -> ValExpr
-    CaseV     :: [(BinExpr, ValExpr)]          -> ValExpr
-    IfV       :: BinExpr -> ValExpr -> ValExpr -> ValExpr
-    deriving (Show)
+--The variable declatarion section
+data VarAbsType where
+    Abs   ::        VarAbsType
+    UnAbs :: Int -> VarAbsType
+
+--The transition section
+data CtrlExpr a v where
+    Assign :: a -> ValExpr v                   -> CtrlExpr a v
+    Signal :: String -> ValExpr v              -> CtrlExpr a v
+    CaseC  :: [(BinExpr v, CtrlExpr a v)]      -> CtrlExpr a v
+    Conj   :: [CtrlExpr a v]                   -> CtrlExpr a v
+    deriving (Show, Functor, Foldable, Traversable)
+
+--newtype CtrlExpr2 v a = CtrlExpr2 (CtrlExpr a v) deriving (Functor, Foldable, Traversable)
+
+data ValExpr v where
+    Lit       :: v                             -> ValExpr v
+    CaseV     :: [(BinExpr v, ValExpr v)]      -> ValExpr v
+    deriving (Show, Functor, Foldable, Traversable)
 
 data BinOpType = And | Or deriving (Show)
 data PredType  = Eq | Neq deriving (Show)
 
-data BinExpr where
-    TrueE  ::                                    BinExpr
-    FalseE ::                                    BinExpr
-    Not    :: BinExpr                         -> BinExpr
-    Bin    :: BinOpType -> BinExpr -> BinExpr -> BinExpr
-    Pred   :: PredType -> ValExpr -> ValExpr  -> BinExpr
-    Atom   :: String                          -> BinExpr
-    deriving (Show)
+data BinExpr v where
+    TrueE  ::                                        BinExpr v
+    FalseE ::                                        BinExpr v
+    Not    :: BinExpr v                           -> BinExpr v
+    Bin    :: BinOpType -> BinExpr v -> BinExpr v -> BinExpr v
+    Pred   :: PredType -> ValExpr v -> ValExpr v  -> BinExpr v
+    deriving (Show, Functor, Foldable, Traversable)
 

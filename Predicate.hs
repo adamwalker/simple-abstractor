@@ -18,6 +18,17 @@ import Data.Map (Map)
 import Safe
 import Data.Maybe
 
+type Var  = (String, Section)
+
+type Pred = (EqPred, Section)
+
+effectiveSection :: Section -> Section -> Section
+effectiveSection StateSection StateSection = StateSection
+effectiveSection _            _            = LabelSection
+
+data Section = StateSection | LabelSection
+    deriving (Eq, Ord)
+
 data EqPred where
     EqVar   :: String -> String -> EqPred
     EqConst :: String -> Int    -> EqPred
