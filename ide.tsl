@@ -33,19 +33,6 @@ TRANS
         true                       : dev_sect;
     };
 
-    /*
-
-    dev_sect_finite : {udma_m1, udma_m2, other}
-    write8_arg_dev_sect_fin : same as above
-    will introduce preds such as write8arg==udma_m1 etc
-
-    dev_sect_finite := case {
-        cont==1 && ctag==0 && addr==2 : write8_arg_dev_sect_fin;
-        true                       : dev_sect_finite;
-    };
-
-    */
-
     os_lba_low := case {
         cont==0 && utag==0 : read_req_lba_low_arg;
         true             : os_lba_low;
@@ -73,32 +60,11 @@ TRANS
         true                                    : 0;
     };
 
-    class_udma_mode_val <= dev_sect;
-
-    //class_sect_written <= if(utag==1){1}else{0};
-    class_lba_low <= dev_lba_low;
-
-    /*
-    if(utag==1){
-        {
-            var1 <= 1;
-            var2 <= 2;
-            var3 := if(var1==var2) {1} else {0};
-        }
-    } else {
-        {
-            var1 <= 0;
-            var2 <= 3;
-            var3 := if(var1==var2) {1} else {0};
-        }
-    };
-    */
-
     os_st := case {
         os_st==0 : case {
             cont==0 && class_sect_written==1 : 2; //error
-            cont==0 && utag==2            : 1;
-            true                        : 0;
+            cont==0 && utag==2               : 1;
+            true                             : 0;
         };
         os_st==1 : case {
             cont==0 && class_sect_written==1 && class_lba_low!=os_lba_low : 2;

@@ -44,7 +44,7 @@ absBOpToTSLBOp AST.Or  = Backend.Or
 --Takes two value expressions and returns the backend code that states that
 --they are equal and the new predicates that are required to make this
 --decision
-handleValPred :: ValExpr (Either VarInfo Int)  -> ValExpr (Either VarInfo Int) -> (AST f v c Predicate.Pred Predicate.Var, [EqPred])
+handleValPred :: ValExpr (Either VarInfo Int) -> ValExpr (Either VarInfo Int) -> (AST f v c Predicate.Pred Predicate.Var, [EqPred])
 handleValPred (Lit (Left (VarInfo x Abs sect)))         (Lit (Right y)) = (Backend.Pred (pred, sect), [pred]) where pred = constructConstPred x y
 handleValPred (Lit (Left (VarInfo x (NonAbs sz) sect)))  (Lit (Right y)) = (Backend.EqConst (Right (x, sect, sz)) y, []) 
 handleValPred (Lit (Right y)) (Lit (Left (VarInfo x Abs sect)))         = (Backend.Pred (pred, sect), [pred]) where pred = constructConstPred x y
@@ -231,7 +231,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             | fst lres == fst rres = abs2 lv rv
             | otherwise            = Abs2Return tsl newPreds
             where
-            getRet var = fromJustNote "getIdent" $ Map.lookup var theMap
+            getRet var = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
             labs1ret = abs1Ret (snd lres) lv
             rabs1ret = abs1Ret (snd rres) rv
             lres = getRet lv

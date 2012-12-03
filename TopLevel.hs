@@ -32,7 +32,11 @@ doIt fres = do
     m <- cuddInitSTDefaults
     case funcy m fres of 
         Left  err        -> return $ Left err
-        Right abstractor -> liftM Right $ Refine.absRefineLoop m (hack m abstractor) undefined undefined
+        Right abstractor -> liftM Right $ Refine.absRefineLoop m (hack m abstractor) ts (error "No abstractor state")
+            where
+            ts   = Refine.TheorySolver ucs ucsl undefined
+            ucs  = const Nothing
+            ucsl = const $ const Nothing
 
 data Abstractor s u = Abstractor {
     pred :: forall pdb. VarOps pdb Pred Var s u -> EqPred -> DDNode s u   -> StateT pdb (ST s) (DDNode s u),

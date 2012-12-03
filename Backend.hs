@@ -60,7 +60,9 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (LetLit x)    = x
 
 block :: (STDdManager s u -> DDNode s u -> DDNode s u -> ST s (DDNode s u)) -> STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
-block func m nodes = go (bone m) nodes
+block func m nodes = do
+    ref (bone m)
+    go (bone m) nodes
     where
     go accum []     = return accum
     go accum (n:ns) = do
@@ -156,12 +158,20 @@ compile m VarOps{..} = compile' where
         x <- either return getVar x
         lift $ computeCube m x $ take (length x) $ map (testBit c) [0..]
     compile' (Pred x)      = getPred x
-    compile' (Exists f)    = withTmp $ compile' . f
-    compile' (QuantLit x)  = return x
+    compile' (Exists f)    = withTmp $ \x -> do
+        res' <- compile' $ f x
+        res  <- lift $ bexists m res' x
+        lift $ deref m res'
+        return res
+    compile' (QuantLit x)  = do
+        lift $ ref x
+        return x
     compile' (Let x f)     = do
         bind <- compile' x
         res  <- compile' (f bind)
         lift $ deref m bind
         return res
-    compile' (LetLit x)    = return x
+    compile' (LetLit x)    = do
+        lift $ ref x
+        return x
 
