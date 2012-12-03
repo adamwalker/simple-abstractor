@@ -3,16 +3,17 @@
 module Parser where
 
 import Control.Applicative
-import Text.Parsec hiding ((<|>))
+import Text.Parsec hiding ((<|>), many)
 import Text.Parsec.String
 import Text.Parsec.Expr
 import qualified Text.Parsec.Token as T
 import Text.Parsec.Language
 
 import AST
+import Predicate
 
 --The lexer
-reservedNames = ["case", "true", "false", "if"]
+reservedNames = ["case", "true", "false", "if", "abs", "nonabs", "STATE", "LABEL", "TRANS"]
 reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
 
 lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames
@@ -25,6 +26,15 @@ lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames
                                     })
 
 T.TokenParser {..} = lexer
+
+--Variable declarations
+
+absTyp    = Abs <$ reserved "abs"
+nonAbsTyp = NonAbs <$ reserved "nonabs" <*> (fromIntegral <$> natural)
+absTypes  = absTyp <|> nonAbsTyp
+decl      = Decl <$> (sepBy identifier comma) <* colon <*> absTypes
+
+--Expressions
 
 --The Bin expression parser
 binExpr = buildExpressionParser table term
@@ -59,6 +69,13 @@ lit       = Lit   <$> ((Left <$> identifier) <|> ((Right . fromIntegral) <$> int
 vcase     = CaseV <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> valExpr) semi)
 valExpr   = vcase <|> lit
 
-top :: Parser (CtrlExpr String (Either String Int))
-top = whiteSpace *> ctrlExpr <* eof
+spec = Spec 
+    <$  reserved "STATE"
+    <*> sepEndBy decl semi
+    <*  reserved "LABEL"
+    <*> sepEndBy decl semi
+    <*  reserved "TRANS"
+    <*> ctrlExpr
+
+top = whiteSpace *> spec <* eof
 

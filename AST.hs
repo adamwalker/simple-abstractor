@@ -5,6 +5,21 @@ import Data.Functor
 import Data.Foldable
 import Data.Traversable
 
+import Predicate
+
+--Top
+data Spec = Spec {
+    stateDecls :: [Decl],
+    labelDecls :: [Decl],
+    trans      :: CtrlExpr String (Either String Int)
+}
+
+--Variable declaration section
+data Decl = Decl {
+    vars    :: [String],
+    absType :: VarAbsType
+}
+
 --The transition section
 data CtrlExpr a v where
     Assign :: a -> ValExpr v                   -> CtrlExpr a v

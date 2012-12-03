@@ -14,6 +14,7 @@ import Analysis
 import Predicate
 import Backend
 import Resolve
+import AST
 
 main = do
     [fname, l, r] <- getArgs
@@ -21,8 +22,8 @@ main = do
     let res =  parse top "" fres
     case res of 
         Left err -> print err
-        Right ress -> do
-            let theMap = Map.fromList [("dev_lba_low", (Abs, StateSection)), ("dev_lba_hi", (Abs, StateSection)), ("os_lba_low", (Abs, StateSection)), ("os_lba_hi", (Abs, StateSection)), ("dev_st", (NonAbs 5, StateSection)), ("os_st", (NonAbs 6, StateSection)), ("cont", (NonAbs 5, LabelSection)), ("ctag", (NonAbs 5, LabelSection)), ("addr", (NonAbs 5, LabelSection)), ("dev_sect", (Abs, StateSection)), ("class_sect_written", (NonAbs 5, LabelSection)), ("class_lba_low", (Abs, LabelSection)), ("write8_arg", (Abs, LabelSection)), ("utag", (NonAbs 5, StateSection)), ("read_req_lba_low_arg", (Abs, StateSection)), ("read_req_lba_hi_arg", (Abs, StateSection))]
+        Right (Spec sdecls ldecls ress) -> do
+            let theMap = doDecls sdecls ldecls
             case resolve theMap ress of
                 Left err -> putStrLn err
                 Right resss -> do

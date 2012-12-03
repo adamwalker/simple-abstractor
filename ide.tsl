@@ -1,17 +1,14 @@
-/*
 STATE
-dev_lba_low, dev_lba_hi, os_lba_low, os_lba_hi, dev_st, os_st
 
-CLABEL
-cont
-ctag
-write8_arg, 
+dev_lba_low, dev_lba_hi, os_lba_low, os_lba_hi, dev_sect : abs;
+dev_st, os_st                                            : nonabs 5;
 
-ULABEL
-utag
-read_req_lba_low_arg, read_req_lba_hi_arg
+LABEL
 
-*/
+class_lba_low, write8_arg, read_req_lba_low_arg, read_req_lba_hi_arg : abs;
+cont, ctag, addr, class_sect_written, utag                           : nonabs 5;
+
+TRANS
 {
     dev_lba_low := case {
         cont==1 && ctag==0 && addr==0 : write8_arg;
