@@ -5,11 +5,6 @@ import Data.Functor
 import Data.Foldable
 import Data.Traversable
 
---The variable declatarion section
-data VarAbsType where
-    Abs   ::        VarAbsType
-    UnAbs :: Int -> VarAbsType
-
 --The transition section
 data CtrlExpr a v where
     Assign :: a -> ValExpr v                   -> CtrlExpr a v

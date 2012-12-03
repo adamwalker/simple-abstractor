@@ -31,16 +31,27 @@ disjoint (hd:rst) = not (hd `elem` rst) && disjoint rst
 disjoint []       = True
 
 --the abstractor
+
+data VarInfo = VarInfo {
+    name    :: String,
+    typ     :: VarAbsType,
+    section :: Section
+}
+
 absBOpToTSLBOp AST.And = Backend.And
 absBOpToTSLBOp AST.Or  = Backend.Or
 
 --Takes two value expressions and returns the backend code that states that
 --they are equal and the new predicates that are required to make this
 --decision
-handleValPred :: ValExpr (Either String Int)  -> ValExpr (Either String Int) -> (AST v c EqPred String, [EqPred])
-handleValPred (Lit (Left x))  (Lit (Right y)) = (Backend.Pred pred, [pred]) where pred = constructConstPred x y
-handleValPred (Lit (Right x)) (Lit (Left y))  = (Backend.Pred pred, [pred]) where pred = constructConstPred y x
-handleValPred (Lit (Left x))  (Lit (Left y))  = (Backend.Pred pred, [pred]) where pred = constructVarPred x y
+handleValPred :: ValExpr (Either VarInfo Int)  -> ValExpr (Either VarInfo Int) -> (AST v c Predicate.Pred Predicate.Var, [EqPred])
+handleValPred (Lit (Left (VarInfo x Abs sect)))         (Lit (Right y)) = (Backend.Pred (pred, sect), [pred]) where pred = constructConstPred x y
+handleValPred (Lit (Left (VarInfo x (NonAbs _) sect)))  (Lit (Right y)) = (Backend.EqConst (x, sect) y, []) 
+handleValPred (Lit (Right y)) (Lit (Left (VarInfo x Abs sect)))         = (Backend.Pred (pred, sect), [pred]) where pred = constructConstPred x y
+handleValPred (Lit (Right y)) (Lit (Left (VarInfo x (NonAbs _) sect)))  = (Backend.EqConst (x, sect) y, []) 
+handleValPred (Lit (Left (VarInfo x Abs sect1))) (Lit (Left (VarInfo y Abs sect2)))               = (Backend.Pred (pred, effectiveSection sect1 sect2), [pred]) where pred = constructVarPred x y
+handleValPred (Lit (Left (VarInfo x (NonAbs _) sect1))) (Lit (Left (VarInfo y (NonAbs _) sect2))) = (Backend.EqVar (x, sect1) (y, sect2), []) 
+handleValPred (Lit (Left _))  (Lit (Left _))  = error "handleValPred: Attempted to compare pred var and non-pred var"
 handleValPred (Lit (Right x)) (Lit (Right y)) = (if' (x==y) T F, [])
 {-
 handleValPred l r                         = equalityValue "anon1" "anon2" (uncurryValExpToTSLRet Abs1Return lr) (uncurryValExpToTSLRet Abs1Return rr)
@@ -49,7 +60,7 @@ handleValPred l r                         = equalityValue "anon1" "anon2" (uncur
     rr = valExprToTSL "anon2" r
     -}
 
-binExpToTSL :: BinExpr (Either String Int) -> (AST v c EqPred String, [EqPred])
+binExpToTSL :: BinExpr (Either VarInfo Int) -> (AST v c Predicate.Pred Predicate.Var, [EqPred])
 binExpToTSL TrueE                  = (T, [])
 binExpToTSL FalseE                 = (F, [])
 binExpToTSL (AST.Not x)            = (Backend.Not (fst rec), snd rec) where rec = binExpToTSL x
@@ -65,22 +76,23 @@ nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "'==" ++ r ++ "\""
 nsPredToString (NsEqConst x c) = "\"" ++ x ++ "'==" ++ show c ++ "\""
 
 data ValExprToTSLRet v c = ValExprToTSLRet {
-    valExpTSL   :: Map NSEQPred v -> AST v c EqPred String,
+    valExpTSL   :: Map NSEQPred v -> AST v c Predicate.Pred Predicate.Var,
     primedPreds :: [NSEQPred],
     newPreds    :: [EqPred]
 }
 
-uncurryValExpToTSLRet :: ((Map NSEQPred v -> AST v c EqPred String) -> [NSEQPred] -> [EqPred] -> a) -> ValExprToTSLRet v c -> a
+uncurryValExpToTSLRet :: ((Map NSEQPred v -> AST v c Predicate.Pred Predicate.Var) -> [NSEQPred] -> [EqPred] -> a) -> ValExprToTSLRet v c -> a
 uncurryValExpToTSLRet f (ValExprToTSLRet x y z) = f x y z
 
 fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
-valExprToTSL :: String -> ValExpr (Either String Int) -> ValExprToTSLRet v c
+valExprToTSL :: String -> ValExpr (Either VarInfo Int) -> ValExprToTSLRet v c
 valExprToTSL absVar = valExprToTSL'
     where
-    valExprToTSL' (Lit (Left var))  = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar var
+    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar name
+    valExprToTSL' (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
     valExprToTSL' (Lit (Right int)) = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqConst absVar int
     valExprToTSL' (CaseV cases)     = ValExprToTSLRet tsl allPreds newPreds 
         where
@@ -94,17 +106,19 @@ valExprToTSL absVar = valExprToTSL'
         allPreds = nub $ concat $ map primedPreds ccases
 
 data PassValTSLRet v c = PassValTSLRet {
-    passValTSLTSL   :: AST v c EqPred String,
+    passValTSLTSL   :: AST v c Predicate.Pred Predicate.Var,
     passValTSLPreds :: [EqPred],
     passValTSLInts  :: [Int],
     passValTSLVars  :: [String]
 }
 
-passValTSL :: String -> ValExpr (Either String Int) -> Either String (PassValTSLRet v c)
+passValTSL :: String -> ValExpr (Either VarInfo Int) -> Either String (PassValTSLRet v c)
 passValTSL var = passValTSL' 
     where
-    passValTSL' (Lit (Left var2)) = return $ PassValTSLRet (EqVar var var2) [] [] [var]
-    passValTSL' (Lit (Right int)) = return $ PassValTSLRet (EqConst var int) [] [int] []
+    --TODO should use next state vars
+    passValTSL' (Lit (Left (VarInfo var2 (NonAbs _) sect))) = return $ PassValTSLRet (EqVar (var, sect) (var2, StateSection)) [] [] [var]
+    passValTSL' (Lit (Left (VarInfo var Abs sect)))         = error "passValTSL: abstracted variable"
+    passValTSL' (Lit (Right int)) = return $ PassValTSLRet (EqConst (var, StateSection) int) [] [int] []
     passValTSL' (CaseV cases)     = f <$> sequence recs
         where
         conds  = map (binExpToTSL . fst) cases
@@ -117,18 +131,18 @@ passValTSL var = passValTSL'
             vars  = nub $ concat $ map passValTSLVars recs
 
 data Abs1Return v c = Abs1Return {
-    abs1Tsl       :: Map NSEQPred v -> AST v c EqPred String,
+    abs1Tsl       :: Map NSEQPred v -> AST v c Predicate.Pred Predicate.Var,
     abs1Preds     :: [NSEQPred],
     abs1newPreds  :: [EqPred]
 }
 
 data Abs2Return v c = Abs2Return {
-    abs2Tsl   :: AST v c EqPred String,
+    abs2Tsl   :: AST v c Predicate.Pred Predicate.Var,
     abs2Preds :: [EqPred]
 }
 
 data PassThroughReturn v c = PassThroughReturn {
-    passTSL   :: AST v c EqPred String,
+    passTSL   :: AST v c Predicate.Pred Predicate.Var,
     passPreds :: [EqPred],
     passInts  :: [Int],
     passVars  :: [String]
@@ -146,7 +160,7 @@ data Return v c = Return {
     passRet :: String -> Either String (PassThroughReturn v c)
 }
 
-abstract :: CtrlExpr String (Either String Int) -> Either String (Return v c)
+abstract :: CtrlExpr String (Either VarInfo Int) -> Either String (Return v c)
 abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass
     where
     abs1 = error "abs1 called on signal"
@@ -232,16 +246,16 @@ doExists vars func = doExists' vars Map.empty
     doExists' [] accum     = func accum
     doExists' (x:xs) accum = Exists $ \v -> doExists' xs (Map.insert x v accum)
 
-toQV :: NSEQPred -> Map NSEQPred v -> AST v c EqPred String
+toQV :: NSEQPred -> Map NSEQPred v -> AST v c Predicate.Pred Predicate.Var
 toQV nsp mp = QuantLit $ fjml nsp mp
 
-equalityValue :: String -> String -> Abs1Return v c -> Abs1Return v c -> (AST v c EqPred String, [EqPred])
+equalityValue :: String -> String -> Abs1Return v c -> Abs1Return v c -> (AST v c Predicate.Pred Predicate.Var, [EqPred])
 equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
     where
     tsl        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret mp, abs1Tsl rabs1ret mp, theExpr mp])
     newPreds   = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
     allPreds   = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
-    theExpr mp = XNor (Backend.Pred $ constructVarPred lv rv) (Backend.Disj (map Backend.Conj (map (map ($ mp)) tsls)))
+    theExpr mp = XNor (Backend.Pred (constructVarPred lv rv, StateSection)) (Backend.Disj (map Backend.Conj (map (map ($ mp)) tsls)))
     cartProd   = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
     (tsls, preds) = unzip $ map (uncurry func) cartProd
         where
@@ -250,18 +264,18 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
             (tsl, pred) = func' p1 p2
             func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   
                 | r1==r2    = (T, Nothing)
-                | otherwise = (Backend.Pred pred, Just pred) where pred = constructVarPred r1 r2
-            func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (Backend.Pred pred, Just pred) where pred = constructConstPred r1 r2
-            func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (Backend.Pred pred, Just pred) where pred = constructConstPred r2 r1
+                | otherwise = (Backend.Pred (pred, StateSection), Just pred) where pred = constructVarPred r1 r2
+            func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (Backend.Pred (pred, StateSection), Just pred) where pred = constructConstPred r1 r2
+            func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (Backend.Pred (pred, StateSection), Just pred) where pred = constructConstPred r2 r1
             func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (if' (r1==r2) T F, Nothing)
 
-eqConstraintTSL :: String -> String -> String -> AST v c EqPred String
+eqConstraintTSL :: String -> String -> String -> AST v c Predicate.Pred Predicate.Var
 eqConstraintTSL x y z = Backend.Conj $ [func x y z, func y z x, func z x y]
     where
     func x y z = (mt x y `ma` mt y z) `mi` mt x z
-    mt x y     = Backend.Pred $ constructVarPred x y
+    mt x y     = Backend.Pred $ (constructVarPred x y, StateSection)
     mi x y     = Backend.Imp x y
     ma x y     = Backend.And x y
 
-constraintSection :: [(String, String, String)] -> AST v c EqPred String
+constraintSection :: [(String, String, String)] -> AST v c Predicate.Pred Predicate.Var
 constraintSection x = Backend.Conj $ map (uncurryN eqConstraintTSL) x

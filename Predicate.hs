@@ -7,7 +7,12 @@ module Predicate (
     PredEither,
     NSEQPred(..),
     consistencyPreds,
-    toVarPair
+    toVarPair,
+    VarAbsType(..),
+    Section(..),
+    Var,
+    Pred,
+    effectiveSection
     ) where
 
 import qualified Data.Set as Set
@@ -19,7 +24,6 @@ import Safe
 import Data.Maybe
 
 type Var  = (String, Section)
-
 type Pred = (EqPred, Section)
 
 effectiveSection :: Section -> Section -> Section
@@ -27,7 +31,12 @@ effectiveSection StateSection StateSection = StateSection
 effectiveSection _            _            = LabelSection
 
 data Section = StateSection | LabelSection
-    deriving (Eq, Ord)
+    deriving (Show, Eq, Ord)
+
+--The variable declatarion section
+data VarAbsType where
+    Abs    ::        VarAbsType
+    NonAbs :: Int -> VarAbsType
 
 data EqPred where
     EqVar   :: String -> String -> EqPred
