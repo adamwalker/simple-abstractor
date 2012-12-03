@@ -45,7 +45,7 @@ main = do
                             case res of
                                 Left str -> print str
                                 Right (PassThroughReturn tsl preds ints vars) -> do
-                                    putDoc $ prettyPrint $ tsl
+                                    putDoc $ prettyPrint $ tsl (text (pack ("NSVar: " ++ "os_st")))
                                     print preds
                                     print ints
                                     print vars

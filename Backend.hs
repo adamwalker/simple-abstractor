@@ -12,27 +12,27 @@ import Text.PrettyPrint.Leijen.Text
 
 --import CuddExplicitDeref
 
-data AST v c pred var = T
+data AST f v c pred var = T
                       | F
-                      | Not      (AST v c pred var)
-                      | And      (AST v c pred var) (AST v c pred var)
-                      | Or       (AST v c pred var) (AST v c pred var)
-                      | Imp      (AST v c pred var) (AST v c pred var)
-                      | XNor     (AST v c pred var) (AST v c pred var)
-                      | Conj     [AST v c pred var]
-                      | Disj     [AST v c pred var]
-                      | Case     [(AST v c pred var, AST v c pred var)]
-                      | EqVar    var var
-                      | EqConst  var Int
+                      | Not      (AST f v c pred var)
+                      | And      (AST f v c pred var) (AST f v c pred var)
+                      | Or       (AST f v c pred var) (AST f v c pred var)
+                      | Imp      (AST f v c pred var) (AST f v c pred var)
+                      | XNor     (AST f v c pred var) (AST f v c pred var)
+                      | Conj     [AST f v c pred var]
+                      | Disj     [AST f v c pred var]
+                      | Case     [(AST f v c pred var, AST f v c pred var)]
+                      | EqVar    (Either f var) var
+                      | EqConst  (Either f var) Int
                       | Pred     pred
-                      | Exists   (v -> AST v c pred var)
+                      | Exists   (v -> AST f v c pred var)
                       | QuantLit v
-                      | Let      (AST v c pred var) (c -> AST v c pred var)
+                      | Let      (AST f v c pred var) (c -> AST f v c pred var)
                       | LetLit   c
 
 testAST = Let (And T F) (\x -> LetLit x `Or` (Exists $ \v -> LetLit x `And` QuantLit v `Or` Pred "pp"))
 
-prettyPrint :: (Show p, Show v) => AST Doc Doc p v -> Doc
+prettyPrint :: (Show p, Show v) => AST Doc Doc Doc p v -> Doc
 prettyPrint = prettyPrint' 0
     where
     prettyPrint' ng = prettyPrint''
@@ -49,8 +49,10 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (Case cases)  = text "case" <+> lbrace <$$> indent 4 (vcat $ map (uncurry f) cases) <$$> rbrace
             where  
             f c v =   prettyPrint'' c <+> colon <+> prettyPrint'' v <+> semi
-        prettyPrint'' (EqVar x y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
-        prettyPrint'' (EqConst x c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (EqVar (Right x) y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
+        prettyPrint'' (EqVar (Left x) y)   = x <+> text "==" <+> text (pack (show y))
+        prettyPrint'' (EqConst (Right x) c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (EqConst (Left x) c) = x <+> text "==" <+> text (pack (show c))
         prettyPrint'' (Pred x)      = parens $ text $ pack $ "predicate: " ++ show x
         prettyPrint'' (Exists func) = text "exists" <+> parens (text $ pack $ "tvar" ++ show ng) <+> lbrace <$$> indent 4 (prettyPrint' (ng + 1)$ func (text $ pack $ "tvar" ++ show ng)) <$$> rbrace
         prettyPrint'' (QuantLit x)  = x
