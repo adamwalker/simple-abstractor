@@ -157,7 +157,10 @@ compile m VarOps{..} = compile' where
     compile' (EqConst x c) = do
         x <- either return getVar x
         lift $ computeCube m x $ take (length x) $ map (testBit c) [0..]
-    compile' (Pred x)      = getPred x
+    compile' (Pred x)      = do
+        res <- getPred x
+        lift $ ref res
+        return res
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x
         res  <- lift $ bexists m res' x

@@ -34,9 +34,10 @@ doIt fres = do
         Left  err        -> return $ Left err
         Right abstractor -> liftM Right $ Refine.absRefineLoop m (hack m abstractor) ts (error "No abstractor state")
             where
-            ts   = Refine.TheorySolver ucs ucsl undefined
-            ucs  = const Nothing
-            ucsl = const $ const Nothing
+            ts    = Refine.TheorySolver ucs ucsl quant
+            ucs   = const Nothing
+            ucsl  = const $ const Nothing
+            quant _ _ _ _ _ c d e _ = return $ Refine.EQuantRet c d e (bone m) undefined
 
 data Abstractor s u = Abstractor {
     pred :: forall pdb. VarOps pdb Pred Var s u -> EqPred -> DDNode s u   -> StateT pdb (ST s) (DDNode s u),
@@ -59,20 +60,20 @@ hack :: STDdManager s u -> Abstractor s u -> Refine.Abstractor s u o EqPred EqPr
 hack m Abstractor{..} = Refine.Abstractor{..}
     where
     goalAbs   _ ipm ivm spm svm offs _               = do
-        let st = TheState ipm ivm spm svm undefined undefined offs
+        let st = TheState ipm ivm spm svm (error "TopLevel: hack 0") (error "TopLevel: hack 1") offs
         (x, TheState{..}) <- runStateT (goal ops) st
-        return $ Refine.GoalAbsRet sp sv offs x undefined
+        return $ Refine.GoalAbsRet sp sv offs x (error "TopLevel: hack 2")
     initAbs   _ offs _                               = do
-        let st = TheState Map.empty Map.empty Map.empty Map.empty undefined undefined offs
+        let st = TheState Map.empty Map.empty Map.empty Map.empty (error "TopLevel: hack 3") (error "TopLevel: hack 4") offs
         (x, TheState{..}) <- runStateT (init ops) st
-        return $ Refine.InitAbsRet sp sv x offs undefined
+        return $ Refine.InitAbsRet sp sv x offs (error "TopLevel: hack 5")
     updateAbs _ ipm ivm spm svm lpm lvm offs _ ps vs = do
         let st = TheState ipm ivm spm svm lpm lvm offs
         (x, TheState{..}) <- flip runStateT st $ do
             x <- mapM (uncurry $ pred ops) ps
             y <- mapM (uncurry $ pass ops) vs
             return $ x ++ y
-        return $ Refine.UpdateAbsRet sp sv lp lv offs x undefined
+        return $ Refine.UpdateAbsRet sp sv lp lv offs x (error "TopLevel: hack 6")
     ops = VarOps {..}
         where
         getPred (pred, StateSection) = do
