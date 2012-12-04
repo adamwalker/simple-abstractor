@@ -250,11 +250,11 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
     tsl v        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret mp, abs1Tsl rabs1ret mp, theExpr v mp])
     newPreds     = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
     allPreds     = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
-    theExpr v mp = XNor (Backend.QuantLit v) (Backend.Disj (map Backend.Conj (map (map ($ mp)) tsls)))
+    theExpr v mp = Backend.Disj (map Backend.Conj (map ((map ($ mp) . ($ v))) tsls))
     cartProd     = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
     (tsls, preds) = unzip $ map (uncurry func) cartProd
         where
-        func p1 p2 = ([toQV p1, toQV p2, const tsl], pred) 
+        func p1 p2 = (\v -> [toQV p1, toQV p2, const $ XNor (Backend.QuantLit v) tsl], pred) 
             where
             (tsl, pred) = func' p1 p2
             func' (NsEqVar l1 r1 sect1)   (NsEqVar l2 r2 sect2)   
@@ -262,7 +262,7 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
                 | otherwise = (Backend.Pred (pred, effectiveSection sect1 sect2), Just pred) where pred = constructVarPred r1 r2
             func' (NsEqVar l1 r1 sect)   (NsEqConst l2 r2) = (Backend.Pred (pred, sect), Just pred) where pred = constructConstPred r1 r2
             func' (NsEqConst l1 r1) (NsEqVar l2 r2 sect)   = (Backend.Pred (pred, sect), Just pred) where pred = constructConstPred r2 r1
-            func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (if' (r1==r2) T F, Nothing)
+            func' (NsEqConst l1 r1) (NsEqConst l2 r2)      = (if' (r1==r2) T F, Nothing)
 
 eqConstraintTSL :: String -> String -> String -> AST f v c Predicate.Pred Predicate.Var
 eqConstraintTSL x y z = Backend.Conj $ [func x y z, func y z x, func z x y]

@@ -59,10 +59,10 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
         prettyPrint'' (LetLit x)    = x
 
-block :: (STDdManager s u -> DDNode s u -> DDNode s u -> ST s (DDNode s u)) -> STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
-block func m nodes = do
-    ref (bone m)
-    go (bone m) nodes
+block :: (STDdManager s u -> DDNode s u -> DDNode s u -> ST s (DDNode s u)) -> (STDdManager s u -> DDNode s u) -> STDdManager s u -> [DDNode s u] -> ST s (DDNode s u)
+block func s m nodes = do
+    ref (s m)
+    go (s m) nodes
     where
     go accum []     = return accum
     go accum (n:ns) = do
@@ -71,8 +71,8 @@ block func m nodes = do
         deref m n
         go accum' ns
 
-conj = block band
-disj = block bor
+conj = block band bone
+disj = block bor  bzero
 
 ccase :: STDdManager s u -> [(DDNode s u, DDNode s u)] -> ST s (DDNode s u)
 ccase m = go (bzero m) (bzero m)
