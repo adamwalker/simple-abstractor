@@ -66,7 +66,7 @@ toVarPair (EqVar x y) = Just (x, y)
 toVarPair _           = Nothing
 
 data NSEQPred where
-    NsEqVar   :: String -> String -> NSEQPred
+    NsEqVar   :: String -> String -> Section -> NSEQPred
     NsEqConst :: String -> Int    -> NSEQPred
     deriving (Eq, Ord)
 

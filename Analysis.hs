@@ -71,10 +71,6 @@ binExpToTSL (Bin op x y)           = (absBOpToTSLBOp op (fst lr) (fst rr), nub $
 binExpToTSL (AST.Pred AST.Eq x y)  = handleValPred x y
 binExpToTSL (AST.Pred AST.Neq x y) = (Backend.Not $ fst r, snd r) where r = handleValPred x y
 
-nsPredToString :: NSEQPred -> String
-nsPredToString (NsEqVar l r)   = "\"" ++ l ++ "'==" ++ r ++ "\""
-nsPredToString (NsEqConst x c) = "\"" ++ x ++ "'==" ++ show c ++ "\""
-
 data ValExprToTSLRet f v c = ValExprToTSLRet {
     valExpTSL   :: Map NSEQPred v -> AST f v c Predicate.Pred Predicate.Var,
     primedPreds :: [NSEQPred],
@@ -91,7 +87,7 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 valExprToTSL :: String -> ValExpr (Either VarInfo Int) -> ValExprToTSLRet f v c
 valExprToTSL absVar = valExprToTSL'
     where
-    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar name
+    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar name sect
     valExprToTSL' (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
     valExprToTSL' (Lit (Right int)) = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqConst absVar int
     valExprToTSL' (CaseV cases)     = ValExprToTSLRet tsl allPreds newPreds 
@@ -261,11 +257,11 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
         func p1 p2 = ([toQV p1, toQV p2, const tsl], pred) 
             where
             (tsl, pred) = func' p1 p2
-            func' (NsEqVar l1 r1)   (NsEqVar l2 r2)   
+            func' (NsEqVar l1 r1 sect1)   (NsEqVar l2 r2 sect2)   
                 | r1==r2    = (T, Nothing)
-                | otherwise = (Backend.Pred (pred, StateSection), Just pred) where pred = constructVarPred r1 r2
-            func' (NsEqVar l1 r1)   (NsEqConst l2 r2) = (Backend.Pred (pred, StateSection), Just pred) where pred = constructConstPred r1 r2
-            func' (NsEqConst l1 r1) (NsEqVar l2 r2)   = (Backend.Pred (pred, StateSection), Just pred) where pred = constructConstPred r2 r1
+                | otherwise = (Backend.Pred (pred, effectiveSection sect1 sect2), Just pred) where pred = constructVarPred r1 r2
+            func' (NsEqVar l1 r1 sect)   (NsEqConst l2 r2) = (Backend.Pred (pred, sect), Just pred) where pred = constructConstPred r1 r2
+            func' (NsEqConst l1 r1) (NsEqVar l2 r2 sect)   = (Backend.Pred (pred, sect), Just pred) where pred = constructConstPred r2 r1
             func' (NsEqConst l1 r1) (NsEqConst l2 r2) = (if' (r1==r2) T F, Nothing)
 
 eqConstraintTSL :: String -> String -> String -> AST f v c Predicate.Pred Predicate.Var
