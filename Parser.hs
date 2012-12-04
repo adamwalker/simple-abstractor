@@ -13,7 +13,7 @@ import AST
 import Predicate
 
 --The lexer
-reservedNames = ["case", "true", "false", "if", "abs", "nonabs", "STATE", "LABEL", "INIT", "GOAL", "TRANS"]
+reservedNames = ["case", "true", "false", "if", "abs", "nonabs", "STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS"]
 reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
 
 lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames
@@ -73,6 +73,8 @@ spec = Spec
     <$  reserved "STATE"
     <*> sepEndBy decl semi
     <*  reserved "LABEL"
+    <*> sepEndBy decl semi
+    <*  reserved "OUTCOME"
     <*> sepEndBy decl semi
     <*  reserved "INIT"
     <*> binExpr

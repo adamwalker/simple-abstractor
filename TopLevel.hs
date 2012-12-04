@@ -53,6 +53,8 @@ data TheState sp lp s u = TheState {
     sv   :: Map String [Refine.VarInfo s u],
     lp   :: Map lp (Refine.VarInfo s u, Refine.VarInfo s u),
     lv   :: Map String ([Refine.VarInfo s u], Refine.VarInfo s u),
+    op   :: Map sp (DDNode s u),
+    ov   :: Map String [DDNode s u],
     offs :: Int 
 }
 
@@ -60,19 +62,21 @@ hack :: STDdManager s u -> Abstractor s u -> Refine.Abstractor s u o EqPred EqPr
 hack m Abstractor{..} = Refine.Abstractor{..}
     where
     goalAbs   _ ipm ivm spm svm offs _               = do
-        let st = TheState ipm ivm spm svm (error "TopLevel: hack 0") (error "TopLevel: hack 1") offs
+        let st = TheState ipm ivm spm svm (error "TopLevel: hack 0") (error "TopLevel: hack 1") undefined undefined offs
         (x, TheState{..}) <- runStateT (goal ops) st
         return $ Refine.GoalAbsRet sp sv offs x (error "TopLevel: hack 2")
     initAbs   _ offs _                               = do
-        let st = TheState Map.empty Map.empty Map.empty Map.empty (error "TopLevel: hack 3") (error "TopLevel: hack 4") offs
+        let st = TheState Map.empty Map.empty Map.empty Map.empty (error "TopLevel: hack 3") (error "TopLevel: hack 4") undefined undefined offs
         (x, TheState{..}) <- runStateT (init ops) st
         return $ Refine.InitAbsRet sp sv x offs (error "TopLevel: hack 5")
     updateAbs _ ipm ivm spm svm lpm lvm offs _ ps vs = do
-        let st = TheState ipm ivm spm svm lpm lvm offs
+        let st = TheState ipm ivm spm svm lpm lvm Map.empty Map.empty offs
         (x, TheState{..}) <- flip runStateT st $ do
             x <- mapM (uncurry $ pred ops) ps
             y <- mapM (uncurry $ pass ops) vs
             return $ x ++ y
+        cb <- nodesToCube m $ Map.elems op ++ concat (Map.elems ov)
+        x <- mapM (flip (bexists m) cb) x
         return $ Refine.UpdateAbsRet sp sv lp lv offs x (error "TopLevel: hack 6")
     ops = VarOps {..}
         where
@@ -103,6 +107,15 @@ hack m Abstractor{..} = Refine.Abstractor{..}
                     modify $ \st -> st {lp = Map.insert pred ((newVar, offs st), (newEn, offs st + 1)) (lp st)}
                     modify $ \st -> st {offs = offs st + 2}
                     return $ newVar
+        getPred (pred, OutcomeSection) = do
+             theMap <- gets op
+             case Map.lookup pred theMap of
+                 Just var -> return var
+                 Nothing  -> do
+                     st <- get
+                     newVar <- lift $ bvar m $ offs st
+                     modify $ \st -> st {op = Map.insert pred newVar (op st), offs = offs st + 2}
+                     return newVar
         getVar  (nm,  StateSection, sz) = do
             theMap <- gets sv
             case Map.lookup nm theMap of
@@ -132,6 +145,17 @@ hack m Abstractor{..} = Refine.Abstractor{..}
                     modify $ \st -> st {lv = Map.insert nm ((zip newVar inds), (newEn, offs st + sz)) (lv st)}
                     modify $ \st -> st {offs = offs st + sz + 1}
                     return newVar
+        getVar  (nm, OutcomeSection, sz) = do
+            theMap <- gets ov
+            case Map.lookup nm theMap of 
+                Just var -> return var
+                Nothing -> do
+                    st <- get
+                    let inds = take sz $ iterate (+1) (offs st)
+                    newVar <- lift $ sequence $ map (bvar m) inds
+                    modify $ \st -> st {ov = Map.insert nm newVar (ov st)}
+                    modify $ \st -> st {offs = offs st + sz}
+                    return newVar
         withTmp func = do
             ind <- gets offs
             var <- lift $ bvar m ind
@@ -140,11 +164,11 @@ hack m Abstractor{..} = Refine.Abstractor{..}
 
 funcy :: STDdManager s u -> String -> Either String (Abstractor s u)
 funcy m contents = do
-    (Spec sdecls ldecls init goal trans) <- either (Left . show) Right $ parse top "" contents
-    let theMap                           =  doDecls sdecls ldecls 
-    tr                                   <- resolve theMap trans
-    ir                                   <- resolveBin theMap init
-    gr                                   <- resolveBin theMap goal
+    (Spec sdecls ldecls odecls init goal trans) <- either (Left . show) Right $ parse top "" contents
+    let theMap                                  =  doDecls sdecls ldecls odecls
+    tr                                          <- resolve theMap trans
+    ir                                          <- resolveBin theMap init
+    gr                                          <- resolveBin theMap goal
     func m tr ir gr
 
 func :: STDdManager s u -> CtrlExpr String (Either VarInfo Int) -> BinExpr (Either VarInfo Int) -> BinExpr (Either VarInfo Int) -> Either String (Abstractor s u)

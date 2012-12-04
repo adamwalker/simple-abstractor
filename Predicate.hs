@@ -27,10 +27,16 @@ type Var  = (String, Section, Int)
 type Pred = (EqPred, Section)
 
 effectiveSection :: Section -> Section -> Section
-effectiveSection StateSection StateSection = StateSection
-effectiveSection _            _            = LabelSection
+effectiveSection StateSection   StateSection   = StateSection
+effectiveSection LabelSection   StateSection   = LabelSection
+effectiveSection StateSection   LabelSection   = LabelSection
+effectiveSection OutcomeSection StateSection   = OutcomeSection
+effectiveSection StateSection   OutcomeSection = OutcomeSection
+effectiveSection LabelSection   OutcomeSection = OutcomeSection
+effectiveSection OutcomeSection LabelSection   = OutcomeSection
+effectiveSection x              y              = error $ "effectiveSection: " ++ show x ++ " " ++ show y
 
-data Section = StateSection | LabelSection
+data Section = StateSection | LabelSection | OutcomeSection
     deriving (Show, Eq, Ord)
 
 --The variable declatarion section

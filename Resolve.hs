@@ -25,8 +25,8 @@ func mp lit = case lit of
         Just (typ, sect) -> Right $ Left $ VarInfo str typ sect
     Right x -> Right $ Right x
 
-doDecls :: [Decl] -> [Decl] -> Map String (VarAbsType, Section)
-doDecls sd ld = Map.union (Map.fromList $ concatMap (go StateSection) sd) (Map.fromList $ concatMap (go LabelSection) ld)
+doDecls :: [Decl] -> [Decl] -> [Decl] -> Map String (VarAbsType, Section)
+doDecls sd ld od = Map.unions [Map.fromList $ concatMap (go StateSection) sd, Map.fromList $ concatMap (go LabelSection) ld, Map.fromList $ concatMap (go OutcomeSection) od]
     where
     go sect (Decl vars typ) = map go' vars
         where
