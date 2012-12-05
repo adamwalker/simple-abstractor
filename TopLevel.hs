@@ -12,6 +12,7 @@ import Text.Parsec hiding ((<|>))
 
 import CuddST
 import CuddExplicitDeref
+import CuddReorder
 
 import Analysis
 import AST
@@ -30,6 +31,10 @@ doMain = do
 doIt :: String -> ST s (Either String Bool)
 doIt fres = do
     m <- cuddInitSTDefaults
+    cuddAutodynEnable m CuddReorderGroupSift
+    regStdPreReordHook m
+    regStdPostReordHook m
+    cuddEnableReorderingReporting m
     case funcy m fres of 
         Left  err        -> return $ Left err
         Right abstractor -> liftM Right $ Refine.absRefineLoop m (hack m abstractor) ts (error "No abstractor state")
