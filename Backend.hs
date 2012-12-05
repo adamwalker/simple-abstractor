@@ -105,8 +105,12 @@ data VarOps pdb p v s u = VarOps {
 
 compile :: STDdManager s u -> VarOps pdb p v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) p v -> StateT pdb (ST s) (DDNode s u)
 compile m VarOps{..} = compile' where
-    compile' T             = return $ bone m
-    compile' F             = return $ bzero m
+    compile' T             = do
+        lift $ ref $ bone m
+        return $ bone m
+    compile' F             = do
+        lift $ ref $ bzero m
+        return $ bzero m
     compile' (Not x)       = liftM bnot $ compile' x
     compile' (And x y)     = do
         x <- compile' x
