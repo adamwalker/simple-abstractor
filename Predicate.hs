@@ -2,7 +2,7 @@
 module Predicate (
     constructVarPred, 
     constructConstPred,
-    getPred,
+    Predicate.getPred,
     EqPred(..),
     PredEither,
     NSEQPred(..),
@@ -10,9 +10,9 @@ module Predicate (
     toVarPair,
     VarAbsType(..),
     Section(..),
-    Var,
-    Pred,
-    effectiveSection
+    eSectVarPred,
+    eSectConstPred,
+    eSectVar
     ) where
 
 import qualified Data.Set as Set
@@ -23,21 +23,30 @@ import Data.Map (Map)
 import Safe
 import Data.Maybe
 
-type Var  = (String, Section, Int)
-type Pred = (EqPred, Section)
-
-effectiveSection :: Section -> Section -> Section
-effectiveSection StateSection   StateSection   = StateSection
-effectiveSection LabelSection   StateSection   = LabelSection
-effectiveSection StateSection   LabelSection   = LabelSection
-effectiveSection OutcomeSection StateSection   = OutcomeSection
-effectiveSection StateSection   OutcomeSection = OutcomeSection
-effectiveSection LabelSection   OutcomeSection = OutcomeSection
-effectiveSection OutcomeSection LabelSection   = OutcomeSection
-effectiveSection x              y              = error $ "effectiveSection: " ++ show x ++ " " ++ show y
+import Interface
 
 data Section = StateSection | LabelSection | OutcomeSection
     deriving (Show, Eq, Ord)
+
+eSectVarPred :: Section -> Section -> String -> String -> (BAPred EqPred EqPred, EqPred)
+eSectVarPred StateSection   StateSection   x y = (StatePred pred, pred) where pred = constructVarPred x y
+eSectVarPred LabelSection   StateSection   x y = (LabelPred pred, pred) where pred = constructVarPred x y
+eSectVarPred StateSection   LabelSection   x y = (LabelPred pred, pred) where pred = constructVarPred x y
+eSectVarPred OutcomeSection StateSection   x y = (OutPred pred, pred)   where pred = constructVarPred x y
+eSectVarPred StateSection   OutcomeSection x y = (OutPred pred, pred)   where pred = constructVarPred x y
+eSectVarPred LabelSection   OutcomeSection x y = (OutPred pred, pred)   where pred = constructVarPred x y
+eSectVarPred OutcomeSection LabelSection   x y = (OutPred pred, pred)   where pred = constructVarPred x y
+eSectVarPred x              y              _ _ = error $ "effectiveSection: " ++ show x ++ " " ++ show y
+
+eSectConstPred :: Section -> String -> Int -> (BAPred EqPred EqPred, EqPred)
+eSectConstPred StateSection   x y = (StatePred pred, pred) where pred = constructConstPred x y
+eSectConstPred LabelSection   x y = (LabelPred pred, pred) where pred = constructConstPred x y
+eSectConstPred OutcomeSection x y = (OutPred   pred, pred) where pred = constructConstPred x y
+
+eSectVar :: Section -> String -> Int -> BAVar
+eSectVar StateSection   = StateVar
+eSectVar LabelSection   = LabelVar
+eSectVar OutcomeSection = OutVar
 
 --The variable declatarion section
 data VarAbsType where

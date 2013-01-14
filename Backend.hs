@@ -11,6 +11,7 @@ import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
 
 import CuddExplicitDeref
+import Interface
 
 data AST f v c pred var = T
                       | F
@@ -96,12 +97,6 @@ ccase m = go (bzero m) (bzero m)
         deref m neg
         --alive == accum', neg'
         go accum' neg' cs
-
-data VarOps pdb p v s u = VarOps {
-    getPred :: p -> StateT pdb (ST s) (DDNode s u),
-    getVar  :: v -> StateT pdb (ST s) [DDNode s u],
-    withTmp :: forall a. (DDNode s u -> StateT pdb (ST s) a) -> StateT pdb (ST s) a
-}
 
 compile :: STDdManager s u -> VarOps pdb p v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) p v -> StateT pdb (ST s) (DDNode s u)
 compile m VarOps{..} = compile' where
