@@ -80,7 +80,6 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
---(\mp -> QuantLit $ fjml pred mp)
 valExprToTSL :: ValExpr (Either VarInfo Int) -> Abs1Return f v c
 valExprToTSL = valExprToTSL'
     where

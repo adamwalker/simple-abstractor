@@ -5,7 +5,6 @@ module Predicate (
     Predicate.getPred,
     EqPred(..),
     PredEither,
-    NSEQPred(..),
     consistencyPreds,
     toVarPair,
     VarAbsType(..),
@@ -79,11 +78,6 @@ getPred (EqConst l r) = Right (l, r)
 toVarPair :: EqPred -> Maybe (String, String)
 toVarPair (EqVar x y) = Just (x, y)
 toVarPair _           = Nothing
-
-data NSEQPred where
-    NsEqVar   :: String -> String -> Section -> NSEQPred
-    NsEqConst :: String -> Int    -> NSEQPred
-    deriving (Eq, Ord)
 
 aggregate :: (Ord a) => [(a, b)] -> Map a [b]
 aggregate args = foldl f Map.empty args
