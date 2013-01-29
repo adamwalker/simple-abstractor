@@ -76,34 +76,37 @@ binExpToTSL (AST.Pred AST.Eq x y)  = handleValPred x y
 binExpToTSL (AST.Pred AST.Neq x y) = (Backend.Not $ fst r, snd r) where r = handleValPred x y
 
 data ValExprToTSLRet f v c = ValExprToTSLRet {
-    valExpTSL   :: Map NSEQPred v -> AST f v c (BAPred EqPred EqPred) BAVar,
-    primedPreds :: [NSEQPred],
+    valExpTSL   :: (Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) -> AST f v c (BAPred EqPred EqPred) BAVar,
+    primedPreds :: [Either (String, Section) Int],
     newPreds    :: [EqPred]
 }
 
-uncurryValExpToTSLRet :: ((Map NSEQPred v -> AST f v c (BAPred EqPred EqPred) BAVar) -> [NSEQPred] -> [EqPred] -> a) -> ValExprToTSLRet f v c -> a
+uncurryValExpToTSLRet :: (((Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) ->  AST f v c (BAPred EqPred EqPred) BAVar) -> [Either (String, Section) Int] -> [EqPred] -> a) -> ValExprToTSLRet f v c -> a
 uncurryValExpToTSLRet f (ValExprToTSLRet x y z) = f x y z
 
+--fromJust map lookup
 fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
+--(\mp -> QuantLit $ fjml pred mp)
 valExprToTSL :: String -> ValExpr (Either VarInfo Int) -> ValExprToTSLRet f v c
 valExprToTSL absVar = valExprToTSL'
     where
-    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqVar absVar name sect
+    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet ($ (Left (name, sect))) [Left (name, sect)] [] 
     valExprToTSL' (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
-    valExprToTSL' (Lit (Right int)) = ValExprToTSLRet (\mp -> QuantLit $ fjml pred mp) [pred] [] where pred = NsEqConst absVar int
+    valExprToTSL' (Lit (Right int)) = ValExprToTSLRet ($ (Right int)) [Right int] [] 
     valExprToTSL' (CaseV cases)     = ValExprToTSLRet tsl allPreds newPreds 
         where
-        tsl mp = Case $ zip conds (map (uncurry f) (zip (map (($ mp) . valExpTSL) ccases) (map primedPreds ccases)))
+        tsl func = Case $ zip conds (map (uncurry f) (zip (map (($ func) . valExpTSL) ccases) (map primedPreds ccases)))
             where
-            f tslcase preds = Backend.Conj $ map (Backend.Not . QuantLit . flip fjml mp) (allPreds \\ preds) ++ [tslcase]
+            f tslcase preds = Backend.Conj $ map (Backend.Not . func) (allPreds \\ preds) ++ [tslcase]
         conds  = map fst conds'
         ccases = map (valExprToTSL' . snd) cases
         conds' = map (binExpToTSL . fst) cases
         newPreds = nub $ concat $ map snd conds'
         allPreds = nub $ concat $ map primedPreds ccases
+
 data PassValTSLRet f v c = PassValTSLRet {
     passValTSLTSL   :: f -> AST f v c (BAPred EqPred EqPred) BAVar,
     passValTSLPreds :: [EqPred],
@@ -129,8 +132,8 @@ passValTSL = passValTSL'
             vars  = nub $ concat $ map passValTSLVars recs
 
 data Abs1Return f v c = Abs1Return {
-    abs1Tsl       :: Map NSEQPred v -> AST f v c (BAPred EqPred EqPred) BAVar,
-    abs1Preds     :: [NSEQPred],
+    abs1Tsl       :: (Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) -> AST f v c (BAPred EqPred EqPred) BAVar,
+    abs1Preds     :: [Either (String, Section) Int],
     abs1newPreds  :: [EqPred]
 }
 
@@ -193,9 +196,9 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
                 where
                 abs1ress = map ($ absVar) caseabs1s
-                tsl mp = Backend.Case $ zip (map fst conds') $ map (uncurry f . (abs1Tsl &&& abs1Preds))  abs1ress
+                tsl func = Backend.Case $ zip (map fst conds') $ map (uncurry f . (abs1Tsl &&& abs1Preds))  abs1ress
                     where
-                    f tslcase preds = Backend.Conj $ map (Backend.Not . QuantLit . flip fjml mp) (allPreds \\ preds) ++ [tslcase mp]
+                    f tslcase preds = Backend.Conj $ map (Backend.Not . func) (allPreds \\ preds) ++ [tslcase func]
                 conds' = map (binExpToTSL . fst) cases
                 allPreds = nub $ concat $ map abs1Preds abs1ress
                 preds = nub $ concat $ map abs1Preds abs1ress
@@ -238,14 +241,11 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             (tsl, newPreds) = equalityValue lv rv labs1ret rabs1ret
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
 
-doExists :: (Ord a) => [a] -> (Map a v -> AST f v c x y) -> AST f v c x y
+doExists :: (Ord a) => [a] -> ((a -> (AST f v c x y)) -> AST f v c x y) -> AST f v c x y
 doExists vars func = doExists' vars Map.empty
     where
-    doExists' [] accum     = func accum
-    doExists' (x:xs) accum = Exists $ \v -> doExists' xs (Map.insert x v accum)
-
-toQV :: NSEQPred -> Map NSEQPred v -> AST f v c (BAPred EqPred EqPred) BAVar
-toQV nsp mp = QuantLit $ fjml nsp mp
+    doExists' [] accum     = func (flip fjml accum)
+    doExists' (x:xs) accum = Exists $ \v -> doExists' xs (Map.insert x (QuantLit v) accum)
 
 equalityValue :: String -> String -> Abs1Return f v c -> Abs1Return f v c -> (v -> AST f v c (BAPred EqPred EqPred) BAVar, [EqPred])
 equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
@@ -257,15 +257,15 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
     cartProd     = [(x, y) | x <- (abs1Preds labs1ret), y <- (abs1Preds rabs1ret)]
     (tsls, preds) = unzip $ map (uncurry func) cartProd
         where
-        func p1 p2 = (\v -> [toQV p1, toQV p2, const $ XNor (Backend.QuantLit v) tsl], pred) 
+        func p1 p2 = (\v -> [($ p1), ($ p2), const $ XNor (Backend.QuantLit v) tsl], pred) 
             where
             (tsl, pred) = func' p1 p2
-            func' (NsEqVar l1 r1 sect1)   (NsEqVar l2 r2 sect2)   
+            func' (Left (r1, sect1)) (Left (r2, sect2))   
                 | r1==r2    = (T, Nothing)
                 | otherwise = Backend.Pred *** Just $ eSectVarPred sect1 sect2 r1 r2 
-            func' (NsEqVar l1 r1 sect)   (NsEqConst l2 r2) = Backend.Pred *** Just $ eSectConstPred sect r1 r2 
-            func' (NsEqConst l1 r1) (NsEqVar l2 r2 sect)   = Backend.Pred *** Just $ eSectConstPred sect r2 r1 
-            func' (NsEqConst l1 r1) (NsEqConst l2 r2)      = (if' (r1==r2) T F, Nothing)
+            func' (Left (r1, sect)) (Right r2)        = Backend.Pred *** Just $ eSectConstPred sect r1 r2 
+            func' (Right r1)        (Left (r2, sect)) = Backend.Pred *** Just $ eSectConstPred sect r2 r1 
+            func' (Right r1)        (Right r2)        = (if' (r1==r2) T F, Nothing)
 
 {-
 eqConstraintTSL :: String -> String -> String -> AST f v c (BAPred EqPred EqPred) BAVar
