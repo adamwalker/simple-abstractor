@@ -83,14 +83,14 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 valExprToTSL :: ValExpr (Either VarInfo Int) -> Abs1Return f v c
 valExprToTSL = valExprToTSL'
     where
-    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = Abs1Return ($ (Left (name, sect))) [Left (name, sect)] [] 
+    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = Abs1Return (const ($ (Left (name, sect)))) [Left (name, sect)] [] 
     valExprToTSL' (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
-    valExprToTSL' (Lit (Right int)) = Abs1Return ($ (Right int)) [Right int] [] 
+    valExprToTSL' (Lit (Right int)) = Abs1Return (const ($ (Right int))) [Right int] [] 
     valExprToTSL' (CaseV cases)     = Abs1Return tsl allPreds newPreds 
         where
-        tsl func = Case $ zip conds (map (uncurry f) (zip (map (($ func) . abs1Tsl) ccases) (map abs1Preds ccases)))
+        tsl c func = Case $ zip conds (map (uncurry f) (zip (map (($ func) . ($ c) . abs1Tsl) ccases) (map abs1Preds ccases)))
             where
-            f tslcase preds = Backend.Conj $ map (Backend.Not . func) (allPreds \\ preds) ++ [tslcase]
+            f tslcase preds = Backend.Conj $ (if' c (map (Backend.Not . func) (allPreds \\ preds)) []) ++ [tslcase]
         conds  = map fst conds'
         ccases = map (valExprToTSL' . snd) cases
         conds' = map (binExpToTSL . fst) cases
@@ -122,7 +122,7 @@ passValTSL = passValTSL'
             vars  = nub $ concat $ map passValTSLVars recs
 
 data Abs1Return f v c = Abs1Return {
-    abs1Tsl       :: (Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) -> AST f v c (BAPred EqPred EqPred) BAVar,
+    abs1Tsl       :: Bool -> (Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) -> AST f v c (BAPred EqPred EqPred) BAVar,
     abs1Preds     :: [Either (String, Section) Int],
     abs1newPreds  :: [EqPred]
 }
@@ -186,9 +186,9 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
                 where
                 abs1ress = map ($ absVar) caseabs1s
-                tsl func = Backend.Case $ zip (map fst conds') $ map (uncurry f . (abs1Tsl &&& abs1Preds))  abs1ress
+                tsl c func = Backend.Case $ zip (map fst conds') $ map (uncurry f . (($ c) . abs1Tsl &&& abs1Preds))  abs1ress
                     where
-                    f tslcase preds = Backend.Conj $ map (Backend.Not . func) (allPreds \\ preds) ++ [tslcase func]
+                    f tslcase preds = Backend.Conj $ (if' c (map (Backend.Not . func) (allPreds \\ preds)) []) ++ [tslcase func]
                 conds' = map (binExpToTSL . fst) cases
                 allPreds = nub $ concat $ map abs1Preds abs1ress
                 preds = nub $ concat $ map abs1Preds abs1ress
@@ -240,7 +240,7 @@ doExists vars func = doExists' vars Map.empty
 equalityValue :: String -> String -> Abs1Return f v c -> Abs1Return f v c -> (v -> AST f v c (BAPred EqPred EqPred) BAVar, [EqPred])
 equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
     where
-    tsl v        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret mp, abs1Tsl rabs1ret mp, theExpr v mp])
+    tsl v        = doExists allPreds (\mp -> Backend.Conj $ [abs1Tsl labs1ret True mp, abs1Tsl rabs1ret True mp, theExpr v mp])
     newPreds     = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
     allPreds     = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
     theExpr v mp = Backend.Disj (map Backend.Conj (map ((map ($ mp) . ($ v))) tsls))
@@ -258,7 +258,7 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
             func' (Right r1)        (Right r2)        = (if' (r1==r2) T F, Nothing)
 
 equalityConst :: Abs1Return f v c -> Int -> v -> AST f v c (BAPred EqPred EqPred) BAVar
-equalityConst Abs1Return{..} int v = abs1Tsl func
+equalityConst Abs1Return{..} int v = abs1Tsl False func
     where
     func (Left (name, sect)) = QuantLit v `Backend.XNor` (Backend.Pred $ fst $ eSectConstPred sect name int)
     func (Right c)           = QuantLit v `Backend.XNor` (if' (c==int) T F)
