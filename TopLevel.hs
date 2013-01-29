@@ -60,8 +60,11 @@ theAbs m trans init goal = func <$> abstract trans
             y <- mapM (uncurry $ pass ops) vars
             lift $ Backend.conj m $ x ++ y
             where
-            pred ops (Predicate.EqVar v1 v2) = compile m ops . abs2Tsl where Abs2Return {..} = abs2Ret v1 v2
-            pass ops var                     = compile m ops . passTSL where PassThroughReturn {..} = either (error "func") id $ passRet var
+            pred ops (Predicate.EqVar v1 v2) = compile m ops . abs2Tsl       
+                where Abs2Return {..}        = abs2Ret v1 v2
+            pred ops (Predicate.EqConst v c) = compile m ops . equalityConst (abs1Ret v) c
+            pass ops var                     = compile m ops . passTSL 
+                where PassThroughReturn {..} = either (error "func") id $ passRet var
 
 funcy :: STDdManager s u -> String -> Either String (Refine.Abstractor s u EqPred EqPred)
 funcy m contents = do

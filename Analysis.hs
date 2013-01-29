@@ -1,4 +1,4 @@
-{-#LANGUAGE TupleSections, GADTs #-}
+{-#LANGUAGE TupleSections, GADTs, RecordWildCards #-}
 module Analysis where
 
 import Prelude hiding (sequence)
@@ -266,6 +266,12 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
             func' (Left (r1, sect)) (Right r2)        = Backend.Pred *** Just $ eSectConstPred sect r1 r2 
             func' (Right r1)        (Left (r2, sect)) = Backend.Pred *** Just $ eSectConstPred sect r2 r1 
             func' (Right r1)        (Right r2)        = (if' (r1==r2) T F, Nothing)
+
+equalityConst :: Abs1Return f v c -> Int -> v -> AST f v c (BAPred EqPred EqPred) BAVar
+equalityConst Abs1Return{..} int v = abs1Tsl func
+    where
+    func (Left (name, sect)) = QuantLit v `Backend.XNor` (Backend.Pred $ fst $ eSectConstPred sect name int)
+    func (Right c)           = QuantLit v `Backend.XNor` (if' (c==int) T F)
 
 {-
 eqConstraintTSL :: String -> String -> String -> AST f v c (BAPred EqPred EqPred) BAVar
