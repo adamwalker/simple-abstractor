@@ -75,37 +75,28 @@ binExpToTSL (Bin op x y)           = (absBOpToTSLBOp op (fst lr) (fst rr), nub $
 binExpToTSL (AST.Pred AST.Eq x y)  = handleValPred x y
 binExpToTSL (AST.Pred AST.Neq x y) = (Backend.Not $ fst r, snd r) where r = handleValPred x y
 
-data ValExprToTSLRet f v c = ValExprToTSLRet {
-    valExpTSL   :: (Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) -> AST f v c (BAPred EqPred EqPred) BAVar,
-    primedPreds :: [Either (String, Section) Int],
-    newPreds    :: [EqPred]
-}
-
-uncurryValExpToTSLRet :: (((Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) ->  AST f v c (BAPred EqPred EqPred) BAVar) -> [Either (String, Section) Int] -> [EqPred] -> a) -> ValExprToTSLRet f v c -> a
-uncurryValExpToTSLRet f (ValExprToTSLRet x y z) = f x y z
-
 --fromJust map lookup
 fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
 --(\mp -> QuantLit $ fjml pred mp)
-valExprToTSL :: ValExpr (Either VarInfo Int) -> ValExprToTSLRet f v c
+valExprToTSL :: ValExpr (Either VarInfo Int) -> Abs1Return f v c
 valExprToTSL = valExprToTSL'
     where
-    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet ($ (Left (name, sect))) [Left (name, sect)] [] 
+    valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = Abs1Return ($ (Left (name, sect))) [Left (name, sect)] [] 
     valExprToTSL' (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
-    valExprToTSL' (Lit (Right int)) = ValExprToTSLRet ($ (Right int)) [Right int] [] 
-    valExprToTSL' (CaseV cases)     = ValExprToTSLRet tsl allPreds newPreds 
+    valExprToTSL' (Lit (Right int)) = Abs1Return ($ (Right int)) [Right int] [] 
+    valExprToTSL' (CaseV cases)     = Abs1Return tsl allPreds newPreds 
         where
-        tsl func = Case $ zip conds (map (uncurry f) (zip (map (($ func) . valExpTSL) ccases) (map primedPreds ccases)))
+        tsl func = Case $ zip conds (map (uncurry f) (zip (map (($ func) . abs1Tsl) ccases) (map abs1Preds ccases)))
             where
             f tslcase preds = Backend.Conj $ map (Backend.Not . func) (allPreds \\ preds) ++ [tslcase]
         conds  = map fst conds'
         ccases = map (valExprToTSL' . snd) cases
         conds' = map (binExpToTSL . fst) cases
         newPreds = nub $ concat $ map snd conds'
-        allPreds = nub $ concat $ map primedPreds ccases
+        allPreds = nub $ concat $ map abs1Preds ccases
 
 data PassValTSLRet f v c = PassValTSLRet {
     passValTSLTSL   :: f -> AST f v c (BAPred EqPred EqPred) BAVar,
@@ -170,7 +161,7 @@ abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass
 abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass
     where
     abs1 absVar 
-        | absVar == var = uncurryValExpToTSLRet Abs1Return $ valExprToTSL valExp
+        | absVar == var = valExprToTSL valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
     pass varr 
