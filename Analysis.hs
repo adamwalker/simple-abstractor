@@ -90,8 +90,8 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
 --(\mp -> QuantLit $ fjml pred mp)
-valExprToTSL :: String -> ValExpr (Either VarInfo Int) -> ValExprToTSLRet f v c
-valExprToTSL absVar = valExprToTSL'
+valExprToTSL :: ValExpr (Either VarInfo Int) -> ValExprToTSLRet f v c
+valExprToTSL = valExprToTSL'
     where
     valExprToTSL' (Lit (Left (VarInfo name Abs sect)))         = ValExprToTSLRet ($ (Left (name, sect))) [Left (name, sect)] [] 
     valExprToTSL' (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
@@ -170,7 +170,7 @@ abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass
 abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass
     where
     abs1 absVar 
-        | absVar == var = uncurryValExpToTSLRet Abs1Return $ valExprToTSL var valExp
+        | absVar == var = uncurryValExpToTSLRet Abs1Return $ valExprToTSL valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
     pass varr 
