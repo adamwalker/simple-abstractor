@@ -2,11 +2,8 @@
 module Predicate (
     constructVarPred, 
     constructConstPred,
-    Predicate.getPred,
     EqPred(..),
-    PredEither,
     consistencyPreds,
-    toVarPair,
     VarAbsType(..),
     Section(..),
     eSectVarPred,
@@ -68,16 +65,6 @@ constructVarPred x y
 
 constructConstPred :: String -> Int -> EqPred
 constructConstPred = EqConst
-
-type PredEither = Either (String, String) (String, Int)
-
-getPred :: EqPred -> PredEither
-getPred (EqVar l r)   = Left (l, r)
-getPred (EqConst l r) = Right (l, r)
-
-toVarPair :: EqPred -> Maybe (String, String)
-toVarPair (EqVar x y) = Just (x, y)
-toVarPair _           = Nothing
 
 aggregate :: (Ord a) => [(a, b)] -> Map a [b]
 aggregate args = foldl f Map.empty args
