@@ -97,29 +97,22 @@ valExprToTSL = valExprToTSL'
         newPreds = nub $ concat $ map snd conds'
         allPreds = nub $ concat $ map abs1Preds ccases
 
-data PassValTSLRet f v c = PassValTSLRet {
-    passValTSLTSL   :: f -> AST f v c (BAPred EqPred EqPred) BAVar,
-    passValTSLPreds :: [EqPred],
-    passValTSLInts  :: [Int],
-    passValTSLVars  :: [String]
-}
-
-passValTSL :: ValExpr (Either VarInfo Int) -> Either String (PassValTSLRet f v c)
+passValTSL :: ValExpr (Either VarInfo Int) -> Either String (PassThroughReturn f v c)
 passValTSL = passValTSL' 
     where
-    passValTSL' (Lit (Left (VarInfo var (NonAbs sz) sect))) = return $ PassValTSLRet (\v -> Backend.EqVar (Left v) (eSectVar sect var sz)) [] [] [var]
+    passValTSL' (Lit (Left (VarInfo var (NonAbs sz) sect))) = return $ PassThroughReturn (\v -> Backend.EqVar (Left v) (eSectVar sect var sz)) [] [] [var]
     passValTSL' (Lit (Left (VarInfo var Abs sect)))        = error "passValTSL: abstracted variable"
-    passValTSL' (Lit (Right int)) = return $ PassValTSLRet (\v -> Backend.EqConst (Left v) int) [] [int] []
+    passValTSL' (Lit (Right int)) = return $ PassThroughReturn (\v -> Backend.EqConst (Left v) int) [] [int] []
     passValTSL' (CaseV cases)     = f <$> sequence recs
         where
         conds  = map (binExpToTSL . fst) cases
         recs   = map (passValTSL' . snd) cases
-        f recs = PassValTSLRet tsl preds ints vars
+        f recs = PassThroughReturn tsl preds ints vars
             where
-            tsl v = Case $ zip (map fst conds) (map (($ v) . passValTSLTSL) recs) 
-            preds = nub $ concat $ map snd conds ++ map passValTSLPreds recs
-            ints  = nub $ concat $ map passValTSLInts recs
-            vars  = nub $ concat $ map passValTSLVars recs
+            tsl v = Case $ zip (map fst conds) (map (($ v) . passTSL) recs) 
+            preds = nub $ concat $ map snd conds ++ map passPreds recs
+            ints  = nub $ concat $ map passInts recs
+            vars  = nub $ concat $ map passVars recs
 
 data Abs1Return f v c = Abs1Return {
     abs1Tsl       :: Bool -> (Either (String, Section) Int -> AST f v c (BAPred EqPred EqPred) BAVar) -> AST f v c (BAPred EqPred EqPred) BAVar,
@@ -140,7 +133,7 @@ data PassThroughReturn f v c = PassThroughReturn {
 }
 
 data SignalReturn f v c = SignalReturn {
-    sigPassTSL :: PassThroughReturn f v c,
+    sigPassTSL :: Either String (PassThroughReturn f v c),
     sigAbs1    :: Abs1Return f v c
 }
 
@@ -148,33 +141,34 @@ data Return f v c = Return {
     varsRet :: [String],
     abs1Ret :: String -> Abs1Return f v c,
     abs2Ret :: String -> String -> Abs2Return f v c,
-    passRet :: String -> Either String (PassThroughReturn f v c)
+    passRet :: String -> Either String (PassThroughReturn f v c),
+    sigRet  :: String -> SignalReturn f v c
 }
 
 abstract :: CtrlExpr String (Either VarInfo Int) -> Either String (Return f v c)
-abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass
+abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass sig
     where
     abs1 = error "abs1 called on signal"
     abs2 = error "abs2 called on signal"
     pass = error "pass called on signal"
-abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass
+    sig var  = SignalReturn pass abs1
+        where
+        pass = passValTSL valExp
+        abs1 = valExprToTSL valExp
+abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass sig
     where
     abs1 absVar 
         | absVar == var = valExprToTSL valExp
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
     pass varr 
-        | var == varr = f <$> rec
+        | var == varr = passValTSL valExp
         | otherwise = error "invariant broken: pass"
-            where
-            rec = passValTSL valExp
-            f rec = PassThroughReturn tsl preds ints vars
-                where
-                PassValTSLRet tsl preds ints vars = rec
+    sig = error "Invariant broken: sig called on assignment"
 abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
     where
     subcases = map (abstract . snd) cases
-    res subcases = if' (and (map (==hd) rst)) (return $ Return hd abs1 abs2 pass) (throwError "Different vars assigned in case branches")
+    res subcases = if' (and (map (==hd) rst)) (return $ Return hd abs1 abs2 pass sig) (throwError "Different vars assigned in case branches")
         where
         (hd:rst)   = map (sort . varsRet) subcases
         caseabs1s  = map abs1Ret subcases
@@ -201,10 +195,11 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
             where
             rec = map ($ var) casePasses
             f rec = PassThroughReturn (\v -> Backend.Case $ zip (map fst conds) (map (($ v) . passTSL) rec)) (nub $ concat $ map passPreds rec ++ map snd conds) (nub $ concat $ map passInts rec) (nub $ concat $ map passVars rec)
+        sig  = error "not implemented"
 abstract (AST.Conj es) = join $ res <$> sequenceA rres
     where
     rres = map abstract es
-    res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2 pass) (throwError "Vars assigned in case statement are not disjoint")
+    res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2 pass sig) (throwError "Vars assigned in case statement are not disjoint")
         where
         varsAssigned = map varsRet rres
         allVars  = concat varsAssigned
@@ -230,6 +225,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             rres = getRet rv
             (tsl, newPreds) = equalityValue lv rv labs1ret rabs1ret
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
+        sig  = error "not implemented"
 
 doExists :: (Ord a) => [a] -> ((a -> (AST f v c x y)) -> AST f v c x y) -> AST f v c x y
 doExists vars func = doExists' vars Map.empty
