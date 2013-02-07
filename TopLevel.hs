@@ -21,6 +21,7 @@ import Parser
 import Predicate
 import Resolve
 import qualified Refine
+import qualified RefineLFP
 import Interface
 
 doMain = do
@@ -38,20 +39,20 @@ doIt fres = do
     cuddEnableReorderingReporting m
     case funcy m fres of 
         Left  err        -> return $ Left err
-        Right abstractor -> liftM Right $ Refine.absRefineLoop m abstractor ts (error "No abstractor state")
+        Right abstractor -> liftM Right $ RefineLFP.absRefineLoop m abstractor ts (error "No abstractor state")
             where
             ts    = Refine.TheorySolver ucs ucsl quant
             ucs   = const Nothing
             ucsl  = const $ const Nothing
             quant _ _ _ = return $ bone m
 
-theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (Refine.Abstractor s u EqPred EqPred)
+theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineLFP.Abstractor s u EqPred EqPred)
 theAbs m trans init goal = func <$> abstract trans
     where
-    func Return{..} = Refine.Abstractor{..}
+    func Return{..} = RefineLFP.Abstractor{..}
         where
-        goalAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
-        goalAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
+        safeAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
+        safeAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
         initAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
         initAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL init
         updateAbs :: [(EqPred, DDNode s u)] -> [(String, [DDNode s u])] -> VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
@@ -66,7 +67,7 @@ theAbs m trans init goal = func <$> abstract trans
             pass ops var                     = compile m ops . passTSL 
                 where PassThroughReturn {..} = either (error "func") id $ passRet var
 
-funcy :: STDdManager s u -> String -> Either String (Refine.Abstractor s u EqPred EqPred)
+funcy :: STDdManager s u -> String -> Either String (RefineLFP.Abstractor s u EqPred EqPred)
 funcy m contents = do
     (Spec sdecls ldecls odecls init goal trans) <- either (Left . show) Right $ parse top "" contents
     let theMap                                  =  doDecls sdecls ldecls odecls
