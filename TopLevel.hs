@@ -44,7 +44,7 @@ doIt fres = do
             ts    = Refine.TheorySolver ucs ucsl quant
             ucs   = const Nothing
             ucsl  = const $ const Nothing
-            quant _ _ _ = return $ bone m
+            quant _ _ = return $ bone m
 
 theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineLFP.Abstractor s u EqPred EqPred)
 theAbs m trans init goal = func <$> abstract trans
