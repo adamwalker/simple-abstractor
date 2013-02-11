@@ -1,5 +1,13 @@
 {-#LANGUAGE TupleSections, GADTs, RecordWildCards #-}
-module Analysis where
+module Analysis (
+    VarInfo(..),
+    Abs2Return(..),
+    PassThroughReturn(..),
+    Return(..),
+    abstract,
+    binExpToTSL,
+    equalityConst
+    ) where
 
 import Prelude hiding (sequence)
 import Control.Applicative

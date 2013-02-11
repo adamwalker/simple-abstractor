@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, PolymorphicComponents #-}
 
-module Backend where
+module Backend (
+    AST(..),
+    prettyPrint,
+    compile,
+    conj,
+    disj
+    ) where
 
 import Control.Monad
 import Control.Monad.ST.Lazy 
