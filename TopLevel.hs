@@ -23,6 +23,7 @@ import Resolve
 import qualified RefineCommon
 import qualified RefineGFP
 import qualified RefineLFP
+import qualified RefineReachFair
 import Interface
 
 doMain = do
