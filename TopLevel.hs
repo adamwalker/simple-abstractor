@@ -7,8 +7,11 @@ import Control.Monad.State
 import Data.Functor
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Control.Applicative
 
 import Text.Parsec hiding ((<|>))
+import qualified Text.Parsec.Token as T
+import Text.Parsec.Language
 
 import CuddST
 import CuddExplicitDeref
@@ -25,6 +28,41 @@ import qualified RefineGFP
 import qualified RefineLFP
 import qualified RefineReachFair
 import Interface
+
+data Spec = Spec {
+    stateDecls   :: [Decl],
+    labelDecls   :: [Decl],
+    outcomeDecls :: [Decl],
+    init         :: BinExpr (Either String Int),
+    goal         :: BinExpr (Either String Int),
+    trans        :: CtrlExpr String (Either String Int)
+}
+
+lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS"]
+                                    ,T.reservedOpNames = reservedOps
+                                    ,T.identStart = letter <|> char '_'
+                                    ,T.identLetter = alphaNum <|> char '_'
+                                    ,T.commentStart = "/*"
+                                    ,T.commentEnd = "*/"
+                                    ,T.commentLine = "//"
+                                    })
+T.TokenParser {..} = lexer
+
+spec = Spec 
+    <$  reserved "STATE"
+    <*> sepEndBy (decl lexer) semi
+    <*  reserved "LABEL"
+    <*> sepEndBy (decl lexer) semi
+    <*  reserved "OUTCOME"
+    <*> sepEndBy (decl lexer) semi
+    <*  reserved "INIT"
+    <*> binExpr lexer
+    <*  reserved "GOAL"
+    <*> binExpr lexer
+    <*  reserved "TRANS"
+    <*> ctrlExpr lexer
+
+top = whiteSpace *> spec <* eof
 
 doMain = do
     [fname] <- getArgs
@@ -71,10 +109,10 @@ theAbs m trans init goal = func <$> abstract trans
 
 funcy :: STDdManager s u -> String -> Either String (RefineGFP.Abstractor s u EqPred EqPred)
 funcy m contents = do
-    (Spec sdecls ldecls odecls init goal trans) <- either (Left . show) Right $ parse top "" contents
-    let theMap                                  =  doDecls sdecls ldecls odecls
-    tr                                          <- resolve theMap trans
-    ir                                          <- resolveBin theMap init
-    gr                                          <- resolveBin theMap goal
+    Spec {..} <- either (Left . show) Right $ parse top "" contents
+    let theMap =  doDecls stateDecls labelDecls outcomeDecls
+    tr         <- resolve theMap trans
+    ir         <- resolveBin theMap init
+    gr         <- resolveBin theMap goal
     theAbs m tr ir gr
 

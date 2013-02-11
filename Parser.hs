@@ -1,6 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Parser where
+module Parser (
+    reservedNames,
+    reservedOps,
+    decl,
+    binExpr,
+    ctrlExpr
+    ) where
 
 import Control.Applicative
 import Text.Parsec hiding ((<|>), many)
@@ -13,75 +19,46 @@ import AST
 import Predicate
 
 --The lexer
-reservedNames = ["case", "true", "false", "if", "abs", "nonabs", "STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS"]
+reservedNames = ["case", "true", "false", "if", "abs", "nonabs"]
 reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
 
-lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames
-                                    ,T.reservedOpNames = reservedOps
-                                    ,T.identStart = letter <|> char '_'
-                                    ,T.identLetter = alphaNum <|> char '_'
-                                    ,T.commentStart = "/*"
-                                    ,T.commentEnd = "*/"
-                                    ,T.commentLine = "//"
-                                    })
-
-T.TokenParser {..} = lexer
-
 --Variable declarations
-
-absTyp    = Abs <$ reserved "abs"
-nonAbsTyp = NonAbs <$ reserved "nonabs" <*> (fromIntegral <$> natural)
-absTypes  = absTyp <|> nonAbsTyp
-decl      = Decl <$> (sepBy identifier comma) <* colon <*> absTypes
+absTyp    t@T.TokenParser{..} = Abs <$ reserved "abs"
+nonAbsTyp t@T.TokenParser{..} = NonAbs <$ reserved "nonabs" <*> (fromIntegral <$> natural)
+absTypes  t@T.TokenParser{..} = absTyp t <|> nonAbsTyp t
+decl      t@T.TokenParser{..} = Decl <$> (sepBy identifier comma) <* colon <*> absTypes t
 
 --Expressions
 
 --The Bin expression parser
-binExpr = buildExpressionParser table term
-        <?> "expression"
+binExpr   t@T.TokenParser{..} =   buildExpressionParser (table t) (term t)
+                              <?> "expression"
 
-predicate =   (try $ (Pred Eq)  <$> valExpr <* reservedOp "==" <*> valExpr)
-          <|> (try $ (Pred Neq) <$> valExpr <* reservedOp "!=" <*> valExpr)
+predicate t@T.TokenParser{..} =   (try $ (Pred Eq)  <$> valExpr t <* reservedOp "==" <*> valExpr t)
+                              <|> (try $ (Pred Neq) <$> valExpr t <* reservedOp "!=" <*> valExpr t)
 
-term =   parens binExpr
-     <|> TrueE <$ reserved "true" 
-     <|> FalseE <$ reserved "false"
-     <|> try predicate
-     <?> "simple expression"
+term      t@T.TokenParser{..} =   parens (binExpr t)
+                              <|> TrueE <$ reserved "true" 
+                              <|> FalseE <$ reserved "false"
+                              <|> try (predicate t)
+                              <?> "simple expression"
 
-table = [[prefix "!"  Not]
-        ,[binary  "&&" (Bin And) AssocLeft]
-        ,[binary  "||" (Bin Or)  AssocLeft]
-        ]
+table     t@T.TokenParser{..} = [[prefix t "!"  Not]
+                                ,[binary t  "&&" (Bin And) AssocLeft]
+                                ,[binary t  "||" (Bin Or)  AssocLeft]
+                                ]
 
-binary name fun assoc = Infix  (fun <$ reservedOp name) assoc
-prefix name fun       = Prefix (fun <$ reservedOp name) 
+binary    t@T.TokenParser{..} name fun assoc = Infix  (fun <$ reservedOp name) assoc
+prefix    t@T.TokenParser{..} name fun       = Prefix (fun <$ reservedOp name) 
 
 --Control expressions
-assign   = Assign <$> identifier <* reservedOp ":=" <*> valExpr
-signal   = Signal <$> identifier <* reservedOp "<=" <*> valExpr
-ccase    = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> ctrlExpr) semi)
-conj     = Conj   <$> braces (sepEndBy ctrlExpr semi)
-ctrlExpr = conj <|> ccase <|> try assign <|> signal
+assign    t@T.TokenParser{..} = Assign <$> identifier <* reservedOp ":=" <*> valExpr t
+signal    t@T.TokenParser{..} = Signal <$> identifier <* reservedOp "<=" <*> valExpr t
+ccase     t@T.TokenParser{..} = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr t <* colon <*> ctrlExpr t) semi)
+conj      t@T.TokenParser{..} = Conj   <$> braces (sepEndBy (ctrlExpr t) semi)
+ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) <|> signal t
 
 --Value expressions
-lit       = Lit   <$> ((Left <$> identifier) <|> ((Right . fromIntegral) <$> integer))
-vcase     = CaseV <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr <* colon <*> valExpr) semi)
-valExpr   = vcase <|> lit
-
-spec = Spec 
-    <$  reserved "STATE"
-    <*> sepEndBy decl semi
-    <*  reserved "LABEL"
-    <*> sepEndBy decl semi
-    <*  reserved "OUTCOME"
-    <*> sepEndBy decl semi
-    <*  reserved "INIT"
-    <*> binExpr
-    <*  reserved "GOAL"
-    <*> binExpr
-    <*  reserved "TRANS"
-    <*> ctrlExpr
-
-top = whiteSpace *> spec <* eof
-
+lit       t@T.TokenParser{..} = Lit   <$> ((Left <$> identifier) <|> ((Right . fromIntegral) <$> integer))
+vcase     t@T.TokenParser{..} = CaseV <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr t <* colon <*> valExpr t) semi)
+valExpr   t@T.TokenParser{..} = vcase t <|> lit t

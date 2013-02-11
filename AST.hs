@@ -7,16 +7,6 @@ import Data.Traversable
 
 import Predicate
 
---Top
-data Spec = Spec {
-    stateDecls   :: [Decl],
-    labelDecls   :: [Decl],
-    outcomeDecls :: [Decl],
-    init         :: BinExpr (Either String Int),
-    goal         :: BinExpr (Either String Int),
-    trans        :: CtrlExpr String (Either String Int)
-}
-
 --Variable declaration section
 data Decl = Decl {
     vars    :: [String],
