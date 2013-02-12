@@ -35,10 +35,11 @@ data Spec = Spec {
     outcomeDecls :: [Decl],
     init         :: BinExpr (Either String Int),
     goal         :: BinExpr (Either String Int),
+    fair         :: BinExpr (Either String Int),
     trans        :: CtrlExpr String (Either String Int)
 }
 
-lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS"]
+lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS", "FAIR"]
                                     ,T.reservedOpNames = reservedOps
                                     ,T.identStart = letter <|> char '_'
                                     ,T.identLetter = alphaNum <|> char '_'
@@ -58,6 +59,8 @@ spec = Spec
     <*  reserved "INIT"
     <*> binExpr lexer
     <*  reserved "GOAL"
+    <*> binExpr lexer
+    <*  reserved "FAIR"
     <*> binExpr lexer
     <*  reserved "TRANS"
     <*> ctrlExpr lexer
@@ -79,20 +82,22 @@ doIt fres = do
     cuddEnableReorderingReporting m
     case funcy m fres of 
         Left  err        -> return $ Left err
-        Right abstractor -> liftM Right $ RefineGFP.absRefineLoop m abstractor ts (error "No abstractor state")
+        Right abstractor -> liftM Right $ RefineReachFair.absRefineLoop m abstractor ts (error "No abstractor state")
             where
             ts    = RefineCommon.TheorySolver ucs ucsl quant
             ucs   = const Nothing
             ucsl  = const $ const Nothing
             quant _ _ = return $ bone m
 
-theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineGFP.Abstractor s u EqPred EqPred)
-theAbs m trans init goal = func <$> abstract trans
+theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineReachFair.Abstractor s u EqPred EqPred)
+theAbs m trans init goal fair = func <$> abstract trans
     where
-    func Return{..} = RefineGFP.Abstractor{..}
+    func Return{..} = RefineReachFair.Abstractor{..}
         where
-        safeAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
-        safeAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
+        fairAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
+        fairAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL fair
+        goalAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
+        goalAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
         initAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
         initAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL init
         updateAbs :: [(EqPred, DDNode s u)] -> [(String, [DDNode s u])] -> VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
@@ -107,12 +112,13 @@ theAbs m trans init goal = func <$> abstract trans
             pass ops var                     = compile m ops . passTSL 
                 where PassThroughReturn {..} = either (error "func") id $ passRet var
 
-funcy :: STDdManager s u -> String -> Either String (RefineGFP.Abstractor s u EqPred EqPred)
+funcy :: STDdManager s u -> String -> Either String (RefineReachFair.Abstractor s u EqPred EqPred)
 funcy m contents = do
     Spec {..} <- either (Left . show) Right $ parse top "" contents
     let theMap =  doDecls stateDecls labelDecls outcomeDecls
     tr         <- resolve theMap trans
     ir         <- resolveBin theMap init
     gr         <- resolveBin theMap goal
-    theAbs m tr ir gr
+    fr         <- resolveBin theMap fair
+    theAbs m tr ir gr fr
 
