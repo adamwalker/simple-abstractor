@@ -73,7 +73,7 @@ doMain = do
     let res = runST $ doIt fres
     print res
 
-doIt :: String -> ST s (Either String Bool)
+doIt :: String -> ST s (Either String (Maybe String))
 doIt fres = do
     m <- cuddInitSTDefaults
     cuddAutodynEnable m CuddReorderGroupSift
