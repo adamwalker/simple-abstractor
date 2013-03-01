@@ -16,7 +16,7 @@ import qualified Text.Parsec.Token as T
 import Text.Parsec.Language
 
 import AST
-import Predicate
+import Predicate hiding (Pred)
 
 --The lexer
 reservedNames = ["case", "true", "false", "if", "abs", "nonabs"]

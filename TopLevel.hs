@@ -18,14 +18,14 @@ import CuddExplicitDeref
 import CuddReorder
 
 import Analysis
-import AST
+import AST hiding (Pred)
 import Backend
 import Parser
 import Predicate
 import Resolve
 import qualified RefineCommon
-import qualified RefineGFP
-import qualified RefineLFP
+--import qualified RefineGFP
+--import qualified RefineLFP
 import qualified RefineReachFair
 import Interface
 
@@ -89,30 +89,29 @@ doIt fres = do
             ucsl  = const $ const Nothing
             quant _ _ = return $ bone m
 
-theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineReachFair.Abstractor s u EqPred EqPred)
+theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineReachFair.Abstractor s u (VarType EqPred) (VarType EqPred))
 theAbs m trans init goal fair = func <$> abstract trans
     where
     func Return{..} = RefineReachFair.Abstractor{..}
         where
-        fairAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
+        fairAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         fairAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL fair
-        goalAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
+        goalAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         goalAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
-        initAbs :: VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
+        initAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         initAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL init
-        updateAbs :: [(EqPred, DDNode s u)] -> [(String, [DDNode s u])] -> VarOps pdb (BAPred EqPred EqPred) BAVar s u -> StateT pdb (ST s) (DDNode s u)
-        updateAbs preds vars ops = do
+        updateAbs :: [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
+        updateAbs preds ops = do
             x <- mapM (uncurry $ pred ops) preds 
-            y <- mapM (uncurry $ pass ops) vars
-            lift $ Backend.conj m $ x ++ y
+            lift $ Backend.conj m x 
             where
-            pred ops (Predicate.EqVar v1 v2) = compile m ops . abs2Tsl       
-                where Abs2Return {..}        = abs2Ret v1 v2
-            pred ops (Predicate.EqConst v c) = compile m ops . equalityConst (abs1Ret v) c
-            pass ops var                     = compile m ops . passTSL 
-                where PassThroughReturn {..} = either (error "func") id $ passRet var
+            pred ops (Pred (Predicate.EqVar v1 v2)) = compile m ops . abs2Tsl       
+                where Abs2Return {..}               = abs2Ret v1 v2
+            pred ops (Pred (Predicate.EqConst v c)) = compile m ops . equalityConst (abs1Ret v) c
+            pred ops (Enum var)                     = compile m ops . passTSL 
+                where PassThroughReturn {..}        = either (error "func") id $ passRet var
 
-funcy :: STDdManager s u -> String -> Either String (RefineReachFair.Abstractor s u EqPred EqPred)
+funcy :: STDdManager s u -> String -> Either String (RefineReachFair.Abstractor s u (VarType EqPred) (VarType EqPred))
 funcy m contents = do
     Spec {..} <- either (Left . show) Right $ parse top "" contents
     let theMap =  doDecls stateDecls labelDecls outcomeDecls

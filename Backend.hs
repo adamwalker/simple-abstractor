@@ -19,27 +19,26 @@ import Text.PrettyPrint.Leijen.Text
 import CuddExplicitDeref
 import Interface
 
-data AST f v c pred var = T
-                      | F
-                      | Not      (AST f v c pred var)
-                      | And      (AST f v c pred var) (AST f v c pred var)
-                      | Or       (AST f v c pred var) (AST f v c pred var)
-                      | Imp      (AST f v c pred var) (AST f v c pred var)
-                      | XNor     (AST f v c pred var) (AST f v c pred var)
-                      | Conj     [AST f v c pred var]
-                      | Disj     [AST f v c pred var]
-                      | Case     [(AST f v c pred var, AST f v c pred var)]
-                      | EqVar    (Either f var) var
-                      | EqConst  (Either f var) Int
-                      | Pred     pred
-                      | Exists   (v -> AST f v c pred var)
-                      | QuantLit v
-                      | Let      (AST f v c pred var) (c -> AST f v c pred var)
-                      | LetLit   c
+data AST f v c var = T
+                   | F
+                   | Not      (AST f v c var)
+                   | And      (AST f v c var) (AST f v c var)
+                   | Or       (AST f v c var) (AST f v c var)
+                   | Imp      (AST f v c var) (AST f v c var)
+                   | XNor     (AST f v c var) (AST f v c var)
+                   | Conj     [AST f v c var]
+                   | Disj     [AST f v c var]
+                   | Case     [(AST f v c var, AST f v c var)]
+                   | EqVar    (Either f var) var
+                   | EqConst  (Either f var) Int
+                   | Exists   (v -> AST f v c var)
+                   | QuantLit v
+                   | Let      (AST f v c var) (c -> AST f v c var)
+                   | LetLit   c
 
-testAST = Let (And T F) (\x -> LetLit x `Or` (Exists $ \v -> LetLit x `And` QuantLit v `Or` Pred "pp"))
+testAST = Let (And T F) (\x -> LetLit x `Or` (Exists $ \v -> LetLit x `And` QuantLit v ))
 
-prettyPrint :: (Show p, Show v) => AST Doc Doc Doc p v -> Doc
+prettyPrint :: Show v => AST Doc Doc Doc v -> Doc
 prettyPrint = prettyPrint' 0
     where
     prettyPrint' ng = prettyPrint''
@@ -60,7 +59,6 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (EqVar (Left x) y)   = x <+> text "==" <+> text (pack (show y))
         prettyPrint'' (EqConst (Right x) c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
         prettyPrint'' (EqConst (Left x) c) = x <+> text "==" <+> text (pack (show c))
-        prettyPrint'' (Pred x)      = parens $ text $ pack $ "predicate: " ++ show x
         prettyPrint'' (Exists func) = text "exists" <+> parens (text $ pack $ "tvar" ++ show ng) <+> lbrace <$$> indent 4 (prettyPrint' (ng + 1)$ func (text $ pack $ "tvar" ++ show ng)) <$$> rbrace
         prettyPrint'' (QuantLit x)  = x
         prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
@@ -104,7 +102,7 @@ ccase m = go (bzero m) (bzero m)
         --alive == accum', neg'
         go accum' neg' cs
 
-compile :: STDdManager s u -> VarOps pdb p v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) p v -> StateT pdb (ST s) (DDNode s u)
+compile :: STDdManager s u -> VarOps pdb v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) v -> StateT pdb (ST s) (DDNode s u)
 compile m VarOps{..} = compile' where
     compile' T             = do
         lift $ ref $ bone m
@@ -162,10 +160,6 @@ compile m VarOps{..} = compile' where
     compile' (EqConst x c) = do
         x <- either return getVar x
         lift $ computeCube m x $ take (length x) $ map (testBit c) [0..]
-    compile' (Pred x)      = do
-        res <- getPred x
-        lift $ ref res
-        return res
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x
         res  <- lift $ bexists m res' x
