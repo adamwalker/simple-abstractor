@@ -26,7 +26,8 @@ import Resolve
 import qualified RefineCommon
 --import qualified RefineGFP
 --import qualified RefineLFP
-import qualified RefineReachFair
+--import qualified RefineReachFair
+import qualified TermiteGame as Game
 import Interface
 
 data Spec = Spec {
@@ -36,10 +37,11 @@ data Spec = Spec {
     init         :: BinExpr (Either String Int),
     goal         :: BinExpr (Either String Int),
     fair         :: BinExpr (Either String Int),
+    cont         :: BinExpr (Either String Int),
     trans        :: CtrlExpr String (Either String Int)
 }
 
-lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS", "FAIR"]
+lexer = T.makeTokenParser (emptyDef {T.reservedNames = reservedNames ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS", "FAIR", "CONT"]
                                     ,T.reservedOpNames = reservedOps
                                     ,T.identStart = letter <|> char '_'
                                     ,T.identLetter = alphaNum <|> char '_'
@@ -62,6 +64,8 @@ spec = Spec
     <*> binExpr lexer
     <*  reserved "FAIR"
     <*> binExpr lexer
+    <*  reserved "CONT"
+    <*> binExpr lexer
     <*  reserved "TRANS"
     <*> ctrlExpr lexer
 
@@ -73,7 +77,7 @@ doMain = do
     let res = runST $ doIt fres
     print res
 
-doIt :: String -> ST s (Either String (Maybe String))
+doIt :: String -> ST s (Either String Bool)
 doIt fres = do
     m <- cuddInitSTDefaults
     cuddAutodynEnable m CuddReorderGroupSift
@@ -82,17 +86,17 @@ doIt fres = do
     cuddEnableReorderingReporting m
     case funcy m fres of 
         Left  err        -> return $ Left err
-        Right abstractor -> liftM Right $ RefineReachFair.absRefineLoop m abstractor ts (error "No abstractor state")
+        Right abstractor -> liftM Right $ Game.absRefineLoop m abstractor ts (error "No abstractor state")
             where
             ts    = RefineCommon.TheorySolver ucs ucsl quant
             ucs   = const Nothing
             ucsl  = const $ const Nothing
             quant _ _ = return $ bone m
 
-theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (RefineReachFair.Abstractor s u (VarType EqPred) (VarType EqPred))
-theAbs m trans init goal fair = func <$> abstract trans
+theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
+theAbs m trans init goal fair cont = func <$> abstract trans
     where
-    func Return{..} = RefineReachFair.Abstractor{..}
+    func Return{..} = Game.Abstractor{..}
         where
         fairAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         fairAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL fair
@@ -100,6 +104,8 @@ theAbs m trans init goal fair = func <$> abstract trans
         goalAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
         initAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         initAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL init
+        contAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
+        contAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL cont
         updateAbs :: [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         updateAbs preds ops = do
             x <- mapM (uncurry $ pred ops) preds 
@@ -111,7 +117,7 @@ theAbs m trans init goal fair = func <$> abstract trans
             pred ops (Enum var)                     = compile m ops . passTSL 
                 where PassThroughReturn {..}        = either (error "func") id $ passRet var
 
-funcy :: STDdManager s u -> String -> Either String (RefineReachFair.Abstractor s u (VarType EqPred) (VarType EqPred))
+funcy :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
 funcy m contents = do
     Spec {..} <- either (Left . show) Right $ parse top "" contents
     let theMap =  doDecls stateDecls labelDecls outcomeDecls
@@ -119,5 +125,6 @@ funcy m contents = do
     ir         <- resolveBin theMap init
     gr         <- resolveBin theMap goal
     fr         <- resolveBin theMap fair
-    theAbs m tr ir gr fr
+    ct         <- resolveBin theMap cont
+    theAbs m tr ir gr fr ct
 
