@@ -36,8 +36,6 @@ data AST f v c var = T
                    | Let      (AST f v c var) (c -> AST f v c var)
                    | LetLit   c
 
-testAST = Let (And T F) (\x -> LetLit x `Or` (Exists $ \v -> LetLit x `And` QuantLit v ))
-
 prettyPrint :: Show v => AST Doc Doc Doc v -> Doc
 prettyPrint = prettyPrint' 0
     where
@@ -56,9 +54,9 @@ prettyPrint = prettyPrint' 0
             where  
             f c v =   prettyPrint'' c <+> colon <+> prettyPrint'' v <+> semi
         prettyPrint'' (EqVar (Right x) y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
-        prettyPrint'' (EqVar (Left x) y)   = x <+> text "==" <+> text (pack (show y))
+        prettyPrint'' (EqVar (Left x) y)    = x <+> text "==" <+> text (pack (show y))
         prettyPrint'' (EqConst (Right x) c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
-        prettyPrint'' (EqConst (Left x) c) = x <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (EqConst (Left x) c)  = x <+> text "==" <+> text (pack (show c))
         prettyPrint'' (Exists func) = text "exists" <+> parens (text $ pack $ "tvar" ++ show ng) <+> lbrace <$$> indent 4 (prettyPrint' (ng + 1)$ func (text $ pack $ "tvar" ++ show ng)) <$$> rbrace
         prettyPrint'' (QuantLit x)  = x
         prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
@@ -125,14 +123,14 @@ compile m VarOps{..} = compile' where
         lift $ deref m x
         lift $ deref m y
         return res
-    compile' (XNor x y)      = do
+    compile' (XNor x y)    = do
         x <- compile' x
         y <- compile' y
         res <- lift $ bxnor m x y
         lift $ deref m x
         lift $ deref m y
         return res
-    compile' (Imp x y)      = do
+    compile' (Imp x y)     = do
         x <- compile' x
         y <- compile' y
         res <- lift $ bor m (bnot x) y
