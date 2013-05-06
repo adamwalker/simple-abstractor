@@ -19,6 +19,10 @@ import Text.PrettyPrint.Leijen.Text
 import CuddExplicitDeref
 import Interface
 
+-- f   == type of anonymous free variables 
+-- v   == type of single bit variables bound by exists statements 
+-- c   == type of single bit variables bound by let statements
+-- var == type of free variable identifiers
 data AST f v c var = T
                    | F
                    | Not      (AST f v c var)
