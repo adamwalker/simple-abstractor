@@ -77,13 +77,18 @@ doMain = do
     let res = runST $ doIt fres
     print res
 
-doIt :: String -> ST s (Either String Bool)
-doIt fres = do
+setupManager :: ST s (STDdManager s u)
+setupManager = do
     m <- cuddInitSTDefaults
     cuddAutodynEnable m CuddReorderGroupSift
     regStdPreReordHook m
     regStdPostReordHook m
     cuddEnableReorderingReporting m
+    return m
+
+doIt :: String -> ST s (Either String Bool)
+doIt fres = do
+    m <- setupManager 
     case funcy m fres of 
         Left  err        -> return $ Left err
         Right abstractor -> liftM Right $ Game.absRefineLoop m abstractor ts (error "No abstractor state")
