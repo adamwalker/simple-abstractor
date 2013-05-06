@@ -15,7 +15,6 @@ import Text.Parsec.Language
 
 import CuddST
 import CuddExplicitDeref
-import CuddReorder
 
 import Analysis
 import AST hiding (Pred)
@@ -77,18 +76,9 @@ doMain = do
     let res = runST $ doIt fres
     print res
 
-setupManager :: ST s (STDdManager s u)
-setupManager = do
-    m <- cuddInitSTDefaults
-    cuddAutodynEnable m CuddReorderGroupSift
-    regStdPreReordHook m
-    regStdPostReordHook m
-    cuddEnableReorderingReporting m
-    return m
-
 doIt :: String -> ST s (Either String Bool)
 doIt fres = do
-    m <- setupManager 
+    m <- RefineCommon.setupManager 
     case funcy m fres of 
         Left  err        -> return $ Left err
         Right abstractor -> liftM Right $ Game.absRefineLoop m abstractor ts (error "No abstractor state")
