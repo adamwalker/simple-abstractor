@@ -34,7 +34,7 @@ data Spec = Spec {
     labelDecls   :: [Decl],
     outcomeDecls :: [Decl],
     init         :: BinExpr (Either String Int),
-    goal         :: BinExpr (Either String Int),
+    goal         :: [BinExpr (Either String Int)],
     fair         :: [BinExpr (Either String Int)],
     cont         :: BinExpr (Either String Int),
     trans        :: CtrlExpr String (Either String Int)
@@ -60,7 +60,7 @@ spec = Spec
     <*  reserved "INIT"
     <*> binExpr lexer
     <*  reserved "GOAL"
-    <*> binExpr lexer
+    <*> sepEndBy (binExpr lexer) semi
     <*  reserved "FAIR"
     <*> sepEndBy (binExpr lexer) semi
     <*  reserved "CONT"
@@ -88,15 +88,15 @@ doIt fres = do
             ucsl  = const $ const Nothing
             quant _ _ = return $ bone m
 
-theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> [BinExpr (Either Analysis.VarInfo Int)] -> BinExpr (Either Analysis.VarInfo Int) -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
+theAbs :: forall s u. STDdManager s u -> CtrlExpr String (Either Analysis.VarInfo Int) -> BinExpr (Either Analysis.VarInfo Int) -> [BinExpr (Either Analysis.VarInfo Int)] -> [BinExpr (Either Analysis.VarInfo Int)] -> BinExpr (Either Analysis.VarInfo Int) -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
 theAbs m trans init goal fair cont = func <$> abstract trans
     where
     func Return{..} = Game.Abstractor{..}
         where
         fairAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) [DDNode s u]
         fairAbs ops              = mapM (compile m ops . fst . binExpToTSL) fair
-        goalAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
-        goalAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL goal
+        goalAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) [DDNode s u]
+        goalAbs ops              = mapM (compile m ops . fst . binExpToTSL) goal
         initAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
         initAbs ops              = compile m ops tsl where (tsl, _) = binExpToTSL init
         contAbs :: VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)
@@ -118,7 +118,7 @@ funcy m contents = do
     let theMap =  doDecls stateDecls labelDecls outcomeDecls
     tr         <- resolve theMap trans
     ir         <- resolveBin theMap init
-    gr         <- resolveBin theMap goal
+    gr         <- mapM (resolveBin theMap) goal
     fr         <- mapM (resolveBin theMap) fair
     ct         <- resolveBin theMap cont
     theAbs m tr ir gr fr ct
