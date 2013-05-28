@@ -9,7 +9,7 @@ module Backend (
     ) where
 
 import Control.Monad
-import Control.Monad.ST.Lazy 
+import Control.Monad.ST
 import Data.Bits
 import Control.Monad.State
 

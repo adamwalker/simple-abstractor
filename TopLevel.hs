@@ -2,7 +2,7 @@
 module TopLevel where
 
 import System.Environment
-import Control.Monad.ST.Lazy
+import Control.Monad.ST
 import Control.Monad.State
 import Data.Functor
 import qualified Data.Map as Map
