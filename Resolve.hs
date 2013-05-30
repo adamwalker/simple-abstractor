@@ -1,6 +1,5 @@
 module Resolve (
     resolve,
-    resolveBin,
     doDecls
     ) where
 
@@ -12,11 +11,8 @@ import AST
 import Analysis
 import Predicate
 
-resolve :: Map String (VarAbsType, Section) -> CtrlExpr String (Either String Int) -> Either String (CtrlExpr String (Either VarInfo Int))
-resolve = traverse . func 
-
-resolveBin :: Map String (VarAbsType, Section) -> BinExpr (Either String Int) -> Either String (BinExpr (Either VarInfo Int))
-resolveBin = traverse . func
+resolve :: (Traversable t) => Map String (VarAbsType, Section) -> t (Either String Int) -> Either String (t (Either VarInfo Int))
+resolve = traverse . func
 
 func :: Map String (VarAbsType, Section) -> (Either String Int) -> Either String (Either VarInfo Int)
 func mp lit = case lit of 

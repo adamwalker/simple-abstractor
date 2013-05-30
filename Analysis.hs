@@ -7,7 +7,8 @@ module Analysis (
     abstract,
     binExpToTSL,
     equalityConst,
-    TheVarType
+    TheVarType,
+    ValType
     ) where
 
 import Prelude hiding (sequence)
@@ -59,10 +60,12 @@ type TheVarType = BAVar (VarType EqPred) (VarType EqPred)
 varEqOne :: TheVarType -> AST f v c TheVarType
 varEqOne x = Backend.EqConst (Right x) 1
 
+type ValType = Either VarInfo Int
+
 --Takes two value expressions and returns the backend code that states that
 --they are equal and the new predicates that are required to make this
 --decision
-handleValPred :: ValExpr (Either VarInfo Int) -> ValExpr (Either VarInfo Int) -> (AST f v c TheVarType, [EqPred])
+handleValPred :: ValExpr ValType -> ValExpr ValType -> (AST f v c TheVarType, [EqPred])
 handleValPred (Lit (Left (VarInfo x Abs sect))) (Lit (Right y)) = varEqOne *** singleton $ eSectConstPred sect x y 
 handleValPred (Lit (Left (VarInfo x (NonAbs sz) sect))) (Lit (Right y)) = (Backend.EqConst (Right (eSectVar sect x sz)) y, []) 
 handleValPred (Lit (Right y)) (Lit (Left (VarInfo x Abs sect)))         = varEqOne *** singleton $ eSectConstPred sect x y 
@@ -78,7 +81,7 @@ handleValPred l r                         = equalityValue "anon1" "anon2" (uncur
     rr = valExprToTSL "anon2" r
 -}
 
-binExpToTSL :: BinExpr (Either VarInfo Int) -> (AST f v c TheVarType, [EqPred])
+binExpToTSL :: BinExpr ValType -> (AST f v c TheVarType, [EqPred])
 binExpToTSL TrueE                  = (T, [])
 binExpToTSL FalseE                 = (F, [])
 binExpToTSL (AST.Not x)            = (Backend.Not (fst rec), snd rec) where rec = binExpToTSL x
@@ -94,7 +97,7 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
-valExprToTSL :: ValExpr (Either VarInfo Int) -> Abs1Return f v c
+valExprToTSL :: ValExpr ValType -> Abs1Return f v c
 valExprToTSL (Lit (Left (VarInfo name Abs sect)))         = Abs1Return (const ($ (Left (name, sect)))) [Left (name, sect)] [] 
 valExprToTSL (Lit (Left (VarInfo name (NonAbs _) sect)))  = error "valExprToTSL with a non-pred variable"
 valExprToTSL (Lit (Right int)) = Abs1Return (const ($ (Right int))) [Right int] [] 
@@ -109,7 +112,7 @@ valExprToTSL (CaseV cases)     = Abs1Return tsl allPreds newPreds
     newPreds = nub $ concat $ map snd conds'
     allPreds = nub $ concat $ map abs1Preds ccases
 
-passValTSL :: ValExpr (Either VarInfo Int) -> Either String (PassThroughReturn f v c)
+passValTSL :: ValExpr ValType -> Either String (PassThroughReturn f v c)
 passValTSL (Lit (Left (VarInfo var (NonAbs sz) sect))) = return $ PassThroughReturn (\v -> Backend.EqVar (Left v) (eSectVar sect var sz)) [] [] [var]
 passValTSL (Lit (Left (VarInfo var Abs sect)))        = error "passValTSL: abstracted variable"
 passValTSL (Lit (Right int)) = return $ PassThroughReturn (\v -> Backend.EqConst (Left v) int) [] [int] []
@@ -155,7 +158,7 @@ data Return f v c = Return {
     sigRet  :: String -> SignalReturn f v c
 }
 
-abstract :: CtrlExpr String (Either VarInfo Int) -> Either String (Return f v c)
+abstract :: CtrlExpr String ValType -> Either String (Return f v c)
 abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass sig
     where
     abs1 = error "abs1 called on signal"
