@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, PolymorphicComponents, ScopedTypeVariables #-}
-module TopLevel where
+module AdamAbstractor.TopLevel where
 
 import System.Environment
 import Control.Monad.ST
@@ -19,12 +19,12 @@ import Data.EitherR
 import CuddST
 import CuddExplicitDeref
 
-import Analysis
-import AST hiding (Pred)
-import Backend
-import Parser
-import Predicate
-import Resolve
+import AdamAbstractor.Analysis
+import AdamAbstractor.AST hiding (Pred)
+import AdamAbstractor.Backend as Backend
+import AdamAbstractor.Parser
+import AdamAbstractor.Predicate as Predicate
+import AdamAbstractor.Resolve
 import qualified RefineCommon
 --import qualified RefineGFP
 --import qualified RefineLFP

@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs #-}
-module Predicate (
+module AdamAbstractor.Predicate (
     VarType(..),
     constructVarPred, 
     constructConstPred,

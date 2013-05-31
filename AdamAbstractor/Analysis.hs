@@ -1,5 +1,5 @@
 {-#LANGUAGE TupleSections, GADTs, RecordWildCards #-}
-module Analysis (
+module AdamAbstractor.Analysis (
     VarInfo(..),
     Abs2Return(..),
     PassThroughReturn(..),
@@ -25,9 +25,9 @@ import Safe
 import Data.Tuple.All
 import Debug.TraceUtils
 
-import AST
-import Predicate
-import Backend
+import AdamAbstractor.AST as AST
+import AdamAbstractor.Predicate
+import AdamAbstractor.Backend as Backend
 
 import Interface hiding (VarInfo, NonAbs)
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, PolymorphicComponents #-}
 
-module Backend (
+module AdamAbstractor.Backend (
     AST(..),
     prettyPrint,
     compile,

@@ -1,11 +1,11 @@
 {-# LANGUAGE GADTs, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-module AST where
+module AdamAbstractor.AST where
 
 import Data.Functor
 import Data.Foldable
 import Data.Traversable
 
-import Predicate
+import AdamAbstractor.Predicate
 
 --Variable declaration section
 data Decl = Decl {

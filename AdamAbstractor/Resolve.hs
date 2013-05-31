@@ -1,4 +1,4 @@
-module Resolve (
+module AdamAbstractor.Resolve (
     resolve,
     doDecls
     ) where
@@ -7,9 +7,9 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Traversable
 
-import AST
-import Analysis
-import Predicate
+import AdamAbstractor.AST
+import AdamAbstractor.Analysis
+import AdamAbstractor.Predicate
 
 resolve :: (Traversable t) => Map String (VarAbsType, Section) -> t (Either String Int) -> Either String (t (Either VarInfo Int))
 resolve = traverse . func
