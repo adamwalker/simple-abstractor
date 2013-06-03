@@ -26,7 +26,7 @@ reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
 absTyp    t@T.TokenParser{..} = Abs <$ reserved "abs"
 nonAbsTyp t@T.TokenParser{..} = NonAbs <$ reserved "nonabs" <*> (fromIntegral <$> natural)
 absTypes  t@T.TokenParser{..} = absTyp t <|> nonAbsTyp t
-decl      t@T.TokenParser{..} = Decl <$> (sepBy identifier comma) <* colon <*> absTypes t
+decl      t@T.TokenParser{..} = Decl <$> sepBy identifier comma <* colon <*> absTypes t
 
 --Expressions
 
@@ -34,8 +34,8 @@ decl      t@T.TokenParser{..} = Decl <$> (sepBy identifier comma) <* colon <*> a
 binExpr   t@T.TokenParser{..} =   buildExpressionParser (table t) (term t)
                               <?> "expression"
 
-predicate t@T.TokenParser{..} =   (try $ (Pred Eq)  <$> valExpr t <* reservedOp "==" <*> valExpr t)
-                              <|> (try $ (Pred Neq) <$> valExpr t <* reservedOp "!=" <*> valExpr t)
+predicate t@T.TokenParser{..} =   try (Pred Eq  <$> valExpr t <* reservedOp "==" <*> valExpr t)
+                              <|> try (Pred Neq <$> valExpr t <* reservedOp "!=" <*> valExpr t)
 
 term      t@T.TokenParser{..} =   parens (binExpr t)
                               <|> TrueE <$ reserved "true" 

@@ -50,14 +50,14 @@ compileUpdate ce m = func <$> abstract ce
             pred (Pred (Predicate.EqConst v c)) = compile m ops . equalityConst (abs1Ret v) c
             pred (Enum var)                     = compile m ops . passTSL (either (error "func") id (passRet var))
 
-stdDef = (emptyDef {T.reservedNames = reservedNames 
-                   ,T.reservedOpNames = reservedOps
-                   ,T.identStart = letter <|> char '_'
-                   ,T.identLetter = alphaNum <|> char '_'
-                   ,T.commentStart = "/*"
-                   ,T.commentEnd = "*/"
-                   ,T.commentLine = "//"
-                   })
+stdDef = emptyDef {T.reservedNames = reservedNames 
+                  ,T.reservedOpNames = reservedOps
+                  ,T.identStart = letter <|> char '_'
+                  ,T.identLetter = alphaNum <|> char '_'
+                  ,T.commentStart = "/*"
+                  ,T.commentEnd = "*/"
+                  ,T.commentLine = "//"
+                  }
 
 ts :: STDdManager s u -> RefineCommon.TheorySolver s u sp lp
 ts m = RefineCommon.TheorySolver ucs ucsl quant

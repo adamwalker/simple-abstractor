@@ -14,7 +14,7 @@ import AdamAbstractor.Predicate
 resolve :: (Traversable t) => Map String (VarAbsType, Section) -> t (Either String Int) -> Either String (t (Either VarInfo Int))
 resolve = traverse . func
 
-func :: Map String (VarAbsType, Section) -> (Either String Int) -> Either String (Either VarInfo Int)
+func :: Map String (VarAbsType, Section) -> Either String Int -> Either String (Either VarInfo Int)
 func mp lit = case lit of 
     Left str -> case Map.lookup str mp of
         Nothing          -> Left  $ "Var doesn't exist: " ++ str

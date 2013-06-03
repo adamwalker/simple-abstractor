@@ -128,13 +128,13 @@ compile m VarOps{..} = compile' where
         where
         bimp m x y = bor m (bnot x) y
     compile' (Conj es)     = do
-        es <- sequence $ map compile' es
+        es <- mapM compile' es
         lift $ conj m es
     compile' (Disj es)     = do
-        es <- sequence $ map compile' es
+        es <- mapM compile' es
         lift $ disj m es
     compile' (Case cs)     = do
-        cs <- sequence $ map func cs 
+        cs <- mapM func cs 
         lift $ ccase m cs
         where
         func (x, y) = do
