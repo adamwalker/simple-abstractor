@@ -106,6 +106,14 @@ ccase m = go (bzero m) (bzero m)
 
 compile :: STDdManager s u -> VarOps pdb v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) v -> StateT pdb (ST s) (DDNode s u)
 compile m VarOps{..} = compile' where
+    binOp func m x y = do
+        x <- compile' x
+        y <- compile' y
+        res <- lift $ func m x y 
+        lift $ deref m x
+        lift $ deref m y
+        return res
+
     compile' T             = do
         lift $ ref $ bone m
         return $ bone m
@@ -113,34 +121,12 @@ compile m VarOps{..} = compile' where
         lift $ ref $ bzero m
         return $ bzero m
     compile' (Not x)       = liftM bnot $ compile' x
-    compile' (And x y)     = do
-        x <- compile' x
-        y <- compile' y
-        res <- lift $ band m x y 
-        lift $ deref m x
-        lift $ deref m y
-        return res
-    compile' (Or x y)      = do
-        x <- compile' x
-        y <- compile' y
-        res <- lift $ bor m x y
-        lift $ deref m x
-        lift $ deref m y
-        return res
-    compile' (XNor x y)    = do
-        x <- compile' x
-        y <- compile' y
-        res <- lift $ bxnor m x y
-        lift $ deref m x
-        lift $ deref m y
-        return res
-    compile' (Imp x y)     = do
-        x <- compile' x
-        y <- compile' y
-        res <- lift $ bor m (bnot x) y
-        lift $ deref m x
-        lift $ deref m y
-        return res
+    compile' (And x y)     = binOp band m x y
+    compile' (Or x y)      = binOp bor m x y
+    compile' (XNor x y)    = binOp bxnor m x y
+    compile' (Imp x y)     = binOp bimp m x y
+        where
+        bimp m x y = bor m (bnot x) y
     compile' (Conj es)     = do
         es <- sequence $ map compile' es
         lift $ conj m es
