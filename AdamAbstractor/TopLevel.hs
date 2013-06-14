@@ -35,16 +35,14 @@ import Interface
 compileBin :: STDdManager s u -> VarOps pdb TheVarType s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
 compileBin m ops = compile m ops . fst . binExpToTSL
 
-newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType s u -> StateT pdb (ST s) (DDNode s u)}
+newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType s u -> StateT pdb (ST s) ([DDNode s u])}
 
 compileUpdate :: CtrlExpr String ValType -> STDdManager s u -> Either String (R s u)
 compileUpdate ce m = func <$> abstract ce
     where
     func Return{..} = R func2
         where 
-        func2 preds ops = do
-            x <- mapM (uncurry pred) preds 
-            lift $ Backend.conj m x 
+        func2 preds ops = mapM (uncurry pred) preds 
             where
             pred (Pred (Predicate.EqVar v1 v2)) = compile m ops . abs2Tsl (abs2Ret v1 v2)       
             pred (Pred (Predicate.EqConst v c)) = compile m ops . equalityConst (abs1Ret v) c
