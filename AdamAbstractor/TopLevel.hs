@@ -111,18 +111,6 @@ spec = Spec <$> parseDecls <*> parseRels
 
 top = whiteSpace *> spec <* eof
 
-{-
-doMain :: IO ()
-doMain = runScript $ do
-    [fname] <- liftIO $ getArgs
-    fres    <- liftIO $ readFile fname
-    res     <- hoistEither $ runST $ runEitherT $ do
-        m   <- lift $ RefineCommon.setupManager 
-        abs <- hoistEither $ makeAbs m fres
-        lift $ Game.absRefineLoop m abs (ts m) (error "No abstractor state")
-    liftIO $ print res
-    -}
-
 makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
 makeAbs m fres = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
