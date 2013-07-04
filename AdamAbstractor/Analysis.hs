@@ -290,15 +290,3 @@ equalityConst Abs1Return{..} int v = abs1Tsl False func
     func (Left (name, sect)) = Backend.EqConst (Left v) 1 `Backend.XNor` varEqOne (fst $ eSectConstPred sect name int)
     func (Right c)           = Backend.EqConst (Left v) 1 `Backend.XNor` if' (c==int) T F
 
-{-
-eqConstraintTSL :: String -> String -> String -> AST f v c (BAPred EqPred EqPred) BAVar
-eqConstraintTSL x y z = Backend.Conj $ [func x y z, func y z x, func z x y]
-    where
-    func x y z = (mt x y `ma` mt y z) `mi` mt x z
-    mt x y     = Backend.Pred $ (constructVarPred x y, StateSection)
-    mi x y     = Backend.Imp x y
-    ma x y     = Backend.And x y
-
-constraintSection :: [(String, String, String)] -> AST f v c (BAPred EqPred EqPred) BAVar
-constraintSection x = Backend.Conj $ map (uncurryN eqConstraintTSL) x
--}
