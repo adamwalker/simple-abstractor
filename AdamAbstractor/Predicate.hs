@@ -50,8 +50,8 @@ eSectVar OutcomeSection n = OutVar   (Enum n)
 
 --The variable declatarion section
 data VarAbsType where
-    Abs    ::        VarAbsType
-    NonAbs :: Int -> VarAbsType
+    Abs    :: VarAbsType
+    NonAbs :: VarAbsType
     
 data EqPred where
     EqVar   :: String -> String -> EqPred

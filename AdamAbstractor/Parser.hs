@@ -19,14 +19,20 @@ import AdamAbstractor.AST
 import AdamAbstractor.Predicate hiding (Pred)
 
 --The lexer
-reservedNames = ["case", "true", "false", "if", "abs", "nonabs"]
+reservedNames = ["case", "true", "false", "if", "abs", "conc", "uint", "bool"]
 reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
+
+--Variable types
+boolTyp   t@T.TokenParser{..} = BoolType <$  reserved "bool"
+intTyp    t@T.TokenParser{..} = IntType  <$  reserved "uint" <*> angles (fromIntegral <$> natural)
+enumTyp   t@T.TokenParser{..} = EnumType <$> braces (sepBy identifier comma)
+typ       t@T.TokenParser{..} = boolTyp t <|> intTyp t <|> enumTyp t
 
 --Variable declarations
 absTyp    t@T.TokenParser{..} = Abs <$ reserved "abs"
-nonAbsTyp t@T.TokenParser{..} = NonAbs <$ reserved "nonabs" <*> (fromIntegral <$> natural)
-absTypes  t@T.TokenParser{..} = absTyp t <|> nonAbsTyp t
-decl      t@T.TokenParser{..} = Decl <$> sepBy identifier comma <* colon <*> absTypes t
+nonAbsTyp t@T.TokenParser{..} = NonAbs <$ reserved "conc" 
+absTypes  t@T.TokenParser{..} = absTyp t <|> nonAbsTyp t 
+decl      t@T.TokenParser{..} = Decl <$> sepBy identifier comma <* colon <*> absTypes t <*> typ t
 
 --Expressions
 
@@ -56,7 +62,7 @@ assign    t@T.TokenParser{..} = Assign <$> identifier <* reservedOp ":=" <*> val
 signal    t@T.TokenParser{..} = Signal <$> identifier <* reservedOp "<=" <*> valExpr t
 ccase     t@T.TokenParser{..} = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr t <* colon <*> ctrlExpr t) semi)
 conj      t@T.TokenParser{..} = Conj   <$> braces (sepEndBy (ctrlExpr t) semi)
-ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) <|> signal t
+ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) -- <|> signal t
 
 --Value expressions
 lit       t@T.TokenParser{..} = Lit   <$> ((Left <$> identifier) <|> ((Right . fromIntegral) <$> integer))

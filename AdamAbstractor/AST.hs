@@ -8,9 +8,16 @@ import Data.Traversable
 import AdamAbstractor.Predicate
 
 --Variable declaration section
+
+data Type where
+    BoolType ::             Type
+    IntType  :: Int      -> Type
+    EnumType :: [String] -> Type
+
 data Decl = Decl {
     vars    :: [String],
-    absType :: VarAbsType
+    absType :: VarAbsType,
+    varType :: Type
 }
 
 --The transition section
