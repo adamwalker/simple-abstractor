@@ -12,15 +12,15 @@ import AdamAbstractor.AST
 import AdamAbstractor.Analysis
 import AdamAbstractor.Predicate
 
-resolve :: (Traversable t) => Map String (Either (VarAbsType, Section, Int) Int) -> t (Either String Int) -> Either String (t (Either VarInfo Int))
+resolve :: (Traversable t) => Map String (Either (VarAbsType, Section, Int) Int) -> t (Either (String, Slice) Int) -> Either String (t (Either VarInfo Int))
 resolve = traverse . func
 
-func :: Map String (Either (VarAbsType, Section, Int) Int) -> Either String Int -> Either String (Either VarInfo Int)
+func :: Map String (Either (VarAbsType, Section, Int) Int) -> Either (String, Slice) Int -> Either String (Either VarInfo Int)
 func mp lit = case lit of 
-    Left str -> case Map.lookup str mp of
+    Left (str, slice) -> case Map.lookup str mp of
         Nothing                     -> Left  $ "Var doesn't exist: " ++ str
-        Just (Left (typ, sect, sz)) -> Right $ Left $ VarInfo str typ sz sect 
-        Just (Right c)              -> Right $ Right c
+        Just (Left (typ, sect, sz)) -> Right $ Left $ VarInfo str typ sz sect slice
+        Just (Right c)              -> Right $ Right c --TODO do the slice
     Right x -> Right $ Right x
 
 doDecls :: [Decl] -> [Decl] -> [Decl] -> Map String (Either (VarAbsType, Section, Int) Int)

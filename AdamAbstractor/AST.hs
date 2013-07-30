@@ -30,6 +30,8 @@ data CtrlExpr a v where
 
 --newtype CtrlExpr2 v a = CtrlExpr2 (CtrlExpr a v) deriving (Functor, Foldable, Traversable)
 
+type Slice = Maybe (Int, Int)
+
 data ValExpr v where
     Lit       :: v                             -> ValExpr v
     CaseV     :: [(BinExpr v, ValExpr v)]      -> ValExpr v

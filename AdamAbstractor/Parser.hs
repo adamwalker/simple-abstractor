@@ -65,6 +65,11 @@ conj      t@T.TokenParser{..} = Conj   <$> braces (sepEndBy (ctrlExpr t) semi)
 ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) -- <|> signal t
 
 --Value expressions
-lit       t@T.TokenParser{..} = Lit   <$> ((Left <$> identifier) <|> ((Right . fromIntegral) <$> integer))
+
+slice     t@T.TokenParser{..} = brackets $ (,) <$> (fromIntegral <$> integer) <* colon <*> (fromIntegral <$> integer)
+slicedVar t@T.TokenParser{..} = (,) <$> identifier <*> optionMaybe (slice t)
+
+lit       t@T.TokenParser{..} = Lit   <$> ((Left <$> slicedVar t) <|> ((Right . fromIntegral) <$> integer))
 vcase     t@T.TokenParser{..} = CaseV <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr t <* colon <*> valExpr t) semi)
 valExpr   t@T.TokenParser{..} = vcase t <|> lit t
+

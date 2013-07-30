@@ -82,7 +82,7 @@ data Rels a = Rels {
 
 data Spec = Spec {
     decls :: Decls,
-    rels  :: Rels (Either String Int)
+    rels  :: Rels (Either (String, Slice) Int)
 }
 
 T.TokenParser {..} = lexer

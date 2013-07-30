@@ -48,7 +48,8 @@ data VarInfo = VarInfo {
     name    :: String,
     typ     :: VarAbsType,
     sz      :: Int,
-    section :: Section
+    section :: Section,
+    slice   :: Slice
 }
 
 absBOpToTSLBOp AST.And = Backend.And
@@ -67,23 +68,23 @@ type ValType = Either VarInfo Int
 --they are equal and the new predicates that are required to make this
 --decision
 handleValPred :: ValExpr ValType -> ValExpr ValType -> (AST f v c TheVarType, [EqPred])
-handleValPred (Lit (Left (VarInfo x Abs _ sect)))
+handleValPred (Lit (Left (VarInfo x Abs _ sect _)))
               (Lit (Right y)) 
               = varEqOne *** singleton $ eSectConstPred sect x y 
-handleValPred (Lit (Left (VarInfo x NonAbs sz sect))) 
+handleValPred (Lit (Left (VarInfo x NonAbs sz sect _))) 
               (Lit (Right y)) 
               = (Backend.EqConst (Right (eSectVar sect x sz)) y, []) 
 handleValPred (Lit (Right y)) 
-              (Lit (Left (VarInfo x Abs _ sect)))
+              (Lit (Left (VarInfo x Abs _ sect _)))
               = varEqOne *** singleton $ eSectConstPred sect x y 
 handleValPred (Lit (Right y)) 
-              (Lit (Left (VarInfo x NonAbs sz sect)))  
+              (Lit (Left (VarInfo x NonAbs sz sect _)))  
               = (Backend.EqConst (Right (eSectVar sect x sz)) y, []) 
-handleValPred (Lit (Left (VarInfo x Abs _ sect1))) 
-              (Lit (Left (VarInfo y Abs _ sect2))) 
+handleValPred (Lit (Left (VarInfo x Abs _ sect1 _))) 
+              (Lit (Left (VarInfo y Abs _ sect2 _))) 
               = varEqOne *** singleton $ eSectVarPred sect1 sect2 x y 
-handleValPred (Lit (Left (VarInfo x NonAbs sz1 sect1))) 
-              (Lit (Left (VarInfo y NonAbs sz2 sect2))) 
+handleValPred (Lit (Left (VarInfo x NonAbs sz1 sect1 _))) 
+              (Lit (Left (VarInfo y NonAbs sz2 sect2 _))) 
               = (Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 ), []) 
 handleValPred (Lit (Left _))  
               (Lit (Left _))  
@@ -117,8 +118,8 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
 valExprToTSL :: ValExpr ValType -> Abs1Return f v c
-valExprToTSL (Lit (Left (VarInfo name Abs _ sect)))         = Abs1Return (const ($ Left (name, sect))) [Left (name, sect)] [] 
-valExprToTSL (Lit (Left (VarInfo name NonAbs sz sect)))  = error "valExprToTSL with a non-pred variable"
+valExprToTSL (Lit (Left (VarInfo name Abs _ sect _)))     = Abs1Return (const ($ Left (name, sect))) [Left (name, sect)] [] 
+valExprToTSL (Lit (Left (VarInfo name NonAbs sz sect _))) = error "valExprToTSL with a non-pred variable"
 valExprToTSL (Lit (Right int))                            = Abs1Return (const ($ Right int)) [Right int] [] 
 valExprToTSL (CaseV cases)                                = Abs1Return tsl allPreds newPreds 
     where
@@ -132,8 +133,8 @@ valExprToTSL (CaseV cases)                                = Abs1Return tsl allPr
     allPreds = nub $ concatMap abs1Preds ccases
 
 passValTSL :: ValExpr ValType -> Either String (PassThroughReturn f v c)
-passValTSL (Lit (Left (VarInfo var NonAbs sz sect))) = return $ PassThroughReturn (\v -> Backend.EqVar (Left v) (eSectVar sect var sz)) [] [] [var]
-passValTSL (Lit (Left (VarInfo var Abs _ sect)))         = error "passValTSL: abstracted variable"
+passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> Backend.EqVar (Left v) (eSectVar sect var sz)) [] [] [var]
+passValTSL (Lit (Left (VarInfo var Abs _ sect _)))     = error "passValTSL: abstracted variable"
 passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> Backend.EqConst (Left v) int) [] [int] []
 passValTSL (CaseV cases)                               = f <$> sequence recs
     where
