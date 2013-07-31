@@ -21,7 +21,7 @@ func mp lit = case lit of
     Left (str, slice) -> case Map.lookup str mp of
         Nothing                     -> Left  $ "Var doesn't exist: " ++ str
         Just (Left (typ, sect, sz)) -> Right $ Left $ VarInfo str typ sz sect slice
-        Just (Right c)              -> Right $ Right c --TODO do the slice
+        Just (Right c)              -> Right $ Right $ getBits slice c
     Right x -> Right $ Right x
 
 doDecls :: [Decl] -> [Decl] -> [Decl] -> Map String (Either (VarAbsType, Section, Int) Int)

@@ -8,7 +8,8 @@ module AdamAbstractor.Analysis (
     binExpToTSL,
     equalityConst,
     TheVarType,
-    ValType
+    ValType,
+    getBits
     ) where
 
 import Prelude hiding (sequence)
@@ -20,6 +21,7 @@ import Data.Map (Map)
 import Data.List
 import Data.Maybe
 import Control.Arrow
+import Data.Bits
 
 import Safe
 import Data.Tuple.All
@@ -176,7 +178,7 @@ data SignalReturn f v c = SignalReturn {
 data Return f v c = Return {
     varsRet :: [String],
     abs1Ret :: String -> Abs1Return f v c,
-    abs2Ret :: String -> String -> Abs2Return f v c,
+    abs2Ret :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Abs2Return f v c,
     passRet :: String -> Either String (PassThroughReturn f v c),
     sigRet  :: String -> SignalReturn f v c
 }
@@ -222,9 +224,9 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
                 conds'     = map (binExpToTSL . fst) cases
                 allPreds   = nub $ concatMap abs1Preds abs1ress
                 preds      = nub $ concatMap abs1Preds abs1ress
-        abs2 lv rv = Abs2Return tsl preds
+        abs2 lv s1 rv s2 = Abs2Return tsl preds 
             where
-            rec   = map (\f -> f lv rv) caseabs2s
+            rec   = map (\f -> f lv s1 rv s2) caseabs2s
             tsl v = Backend.Case $ zip (map fst conds) (map (($ v) . abs2Tsl) rec)
             preds = nub $ concat $ map abs2Preds rec ++ map snd conds
         pass var  = f <$> sequence rec
@@ -250,8 +252,8 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
         abs1 absVar 
             | absVar `elem` allVars = abs1Ret (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup absVar theMap) absVar 
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
-        abs2 lv rv
-            | fst lres == fst rres  = abs2 lv rv --TODO this cant possibly be right
+        abs2 lv s1 rv s2
+            | fst lres == fst rres  = abs2 lv s1 rv s2 --TODO this cant possibly be right
             | otherwise             = Abs2Return tsl newPreds
             where
             getRet var      = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
@@ -259,7 +261,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             rres            = getRet rv
             labs1ret        = abs1Ret (snd lres) lv
             rabs1ret        = abs1Ret (snd rres) rv
-            (tsl, newPreds) = equalityValue lv rv labs1ret rabs1ret
+            (tsl, newPreds) = equalityValue lv s1 rv s2 labs1ret rabs1ret
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
         sig      = error "not implemented"
 
@@ -273,32 +275,36 @@ restrict :: Slice -> Slice -> Slice
 restrict Nothing          Nothing        = Nothing
 restrict Nothing          (Just sl)      = Just sl
 restrict (Just sl)        Nothing        = Just sl
-restrict (Just (x1, x2)) (Just (y1, y2)) = Just (x1 + y1, y1 + x1 - x2)
+restrict (Just (x1, x2)) (Just (y1, y2)) = Just (x1 + y1, y1 + x2)
 
-equalityValue :: String -> String -> Abs1Return f v c -> Abs1Return f v c -> (f -> AST f v c TheVarType, [EqPred])
-equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
+getBits :: Slice -> Int -> Int
+getBits Nothing x       = x
+getBits (Just (l, u)) x = (shift (-l) x) .&. (2 ^ (u - l + 1) - 1)
+
+equalityValue :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Abs1Return f v c -> Abs1Return f v c -> (f -> AST f v c TheVarType, [EqPred])
+equalityValue lv s1Var rv s2Var labs1ret rabs1ret = (tsl, newPreds)
     where
-    tsl v        = doExists allPreds (\mp -> Backend.Conj [abs1Tsl labs1ret True mp, abs1Tsl rabs1ret True mp, theExpr v mp])
+    tsl v        = doExists allPreds (\mp -> Backend.Conj [abs1Tsl labs1ret True (mp . (lv,)), abs1Tsl rabs1ret True (mp . (rv,)), theExpr v mp])
     newPreds     = nub $ abs1newPreds labs1ret ++ abs1newPreds rabs1ret ++ catMaybes preds
-    allPreds     = nub $ abs1Preds labs1ret ++ abs1Preds rabs1ret
+    allPreds     = map (lv,) (abs1Preds labs1ret) ++ map (rv,) (abs1Preds rabs1ret)
     theExpr v mp = Backend.Disj (map Backend.Conj (map (map ($ mp) . ($ v)) tsls))
     cartProd     = [(x, y) | x <- abs1Preds labs1ret, y <- abs1Preds rabs1ret]
     (tsls, preds) = unzip $ map (uncurry func) cartProd
         where
-        func p1 p2 = (\v -> [($ p1), ($ p2), const $ XNor (Backend.EqConst (Left v) 1) tsl], pred) 
+        func p1 p2 = (\v -> [($ (lv, p1)), ($ (rv, p2)), const $ XNor (Backend.EqConst (Left v) 1) tsl], pred) 
             where
             (tsl, pred) = func' p1 p2
             func' (Left (r1, sect1, s1)) (Left (r2, sect2, s2))   
-                | r1==r2 && s1==s2 = (T, Nothing)
-                | otherwise        = varEqOne *** Just $ eSectVarPred sect1 sect2 r1 s1 r2 s2
-            func' (Left (r1, sect, s1)) (Right r2)            = varEqOne *** Just $ eSectConstPred sect r1 s1 r2 
-            func' (Right r1)            (Left (r2, sect, s2)) = varEqOne *** Just $ eSectConstPred sect r2 s2 r1 
-            func' (Right r1)            (Right r2)            = (if' (r1==r2) T F, Nothing)
+                | r1==r2 && restrict s1Var s1 == restrict s2Var s2 = (T, Nothing) 
+                | otherwise                                        = varEqOne *** Just $ eSectVarPred sect1 sect2 r1 (restrict s1Var s1) r2 (restrict s2Var s2)
+            func' (Left (r1, sect, s1)) (Right r2)                 = varEqOne *** Just $ eSectConstPred sect r1 (restrict s1Var s1) r2 
+            func' (Right r1)            (Left (r2, sect, s2))      = varEqOne *** Just $ eSectConstPred sect r2 (restrict s2Var s2) r1 
+            func' (Right r1)            (Right r2)                 = (if' (getBits s1Var r1 == getBits s2Var r2) T F, Nothing) 
 
 equalityConst :: Abs1Return f v c -> Maybe (Int, Int) -> Int -> f -> AST f v c TheVarType
 equalityConst Abs1Return{..} s int v = abs1Tsl False func
     where
     --Argument of func is the value of the variable represented by the Abs1Return has been asigned to
     func (Left (name, sect, sl)) = Backend.EqConst (Left v) 1 `Backend.XNor` varEqOne (fst $ eSectConstPred sect name (restrict s sl) int)
-    func (Right c)               = Backend.EqConst (Left v) 1 `Backend.XNor` if' (c==int) T F --TODO do the slice
+    func (Right c)               = Backend.EqConst (Left v) 1 `Backend.XNor` if' (getBits s c == int) T F 
 

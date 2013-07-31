@@ -38,6 +38,7 @@ eSectVarPred OutcomeSection StateSection   x s1 y s2 = (OutVar (Pred pred) 1, pr
 eSectVarPred StateSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
 eSectVarPred LabelSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
 eSectVarPred OutcomeSection LabelSection   x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
+eSectVarPred LabelSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructVarPred x s1 y s2
 eSectVarPred x              y              _ _  _ _  = error $ "effectiveSection: " ++ show x ++ " " ++ show y
 
 eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> (BAVar (VarType EqPred) (VarType EqPred), EqPred)
