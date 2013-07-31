@@ -117,7 +117,7 @@ parseRels = Rels
     <*  reserved "CONT"
     <*> binExpr lexer
     <*  reserved "TRANS"
-    <*> ctrlExpr lexer
+    <*> (AdamAbstractor.AST.Conj <$> sepEndBy (ctrlExpr lexer) semi)
 
 spec = Spec <$> parseDecls <*> parseRels
 
