@@ -68,21 +68,21 @@ type ValType = Either VarInfo Int
 --they are equal and the new predicates that are required to make this
 --decision
 handleValPred :: ValExpr ValType -> ValExpr ValType -> (AST f v c TheVarType, [EqPred])
-handleValPred (Lit (Left (VarInfo x Abs _ sect _)))
+handleValPred (Lit (Left (VarInfo x Abs _ sect s)))
               (Lit (Right y)) 
-              = varEqOne *** singleton $ eSectConstPred sect x y 
+              = varEqOne *** singleton $ eSectConstPred sect x s y 
 handleValPred (Lit (Left (VarInfo x NonAbs sz sect _))) 
               (Lit (Right y)) 
               = (Backend.EqConst (Right (eSectVar sect x sz)) y, []) 
 handleValPred (Lit (Right y)) 
-              (Lit (Left (VarInfo x Abs _ sect _)))
-              = varEqOne *** singleton $ eSectConstPred sect x y 
+              (Lit (Left (VarInfo x Abs _ sect s)))
+              = varEqOne *** singleton $ eSectConstPred sect x s y 
 handleValPred (Lit (Right y)) 
               (Lit (Left (VarInfo x NonAbs sz sect _)))  
               = (Backend.EqConst (Right (eSectVar sect x sz)) y, []) 
-handleValPred (Lit (Left (VarInfo x Abs _ sect1 _))) 
-              (Lit (Left (VarInfo y Abs _ sect2 _))) 
-              = varEqOne *** singleton $ eSectVarPred sect1 sect2 x y 
+handleValPred (Lit (Left (VarInfo x Abs _ sect1 s1))) 
+              (Lit (Left (VarInfo y Abs _ sect2 s2))) 
+              = varEqOne *** singleton $ eSectVarPred sect1 sect2 x s1 y s2
 handleValPred (Lit (Left (VarInfo x NonAbs sz1 sect1 _))) 
               (Lit (Left (VarInfo y NonAbs sz2 sect2 _))) 
               = (Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 ), []) 
@@ -118,10 +118,10 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
 valExprToTSL :: ValExpr ValType -> Abs1Return f v c
-valExprToTSL (Lit (Left (VarInfo name Abs _ sect _)))     = Abs1Return (const ($ Left (name, sect))) [Left (name, sect)] [] 
-valExprToTSL (Lit (Left (VarInfo name NonAbs sz sect _))) = error "valExprToTSL with a non-pred variable"
-valExprToTSL (Lit (Right int))                            = Abs1Return (const ($ Right int)) [Right int] [] 
-valExprToTSL (CaseV cases)                                = Abs1Return tsl allPreds newPreds 
+valExprToTSL (Lit (Left (VarInfo name Abs _ sect s1)))     = Abs1Return (const ($ Left (name, sect, s1))) [Left (name, sect, s1)] [] 
+valExprToTSL (Lit (Left (VarInfo name NonAbs sz sect s1))) = error "valExprToTSL with a non-pred variable"
+valExprToTSL (Lit (Right int))                             = Abs1Return (const ($ Right int)) [Right int] [] 
+valExprToTSL (CaseV cases)                                 = Abs1Return tsl allPreds newPreds 
     where
     tsl c func = Case $ zip conds (zipWith f (map (($ func) . ($ c) . abs1Tsl) ccases) (map abs1Preds ccases))
         where
@@ -148,8 +148,11 @@ passValTSL (CaseV cases)                               = f <$> sequence recs
         vars  = nub $ concatMap passVars recs
 
 data Abs1Return f v c = Abs1Return {
-    abs1Tsl      :: Bool -> (Either (String, Section) Int -> AST f v c TheVarType) -> AST f v c TheVarType,
-    abs1Preds    :: [Either (String, Section) Int],
+    --The update expressions
+    abs1Tsl      :: Bool -> (Either (String, Section, Slice) Int -> AST f v c TheVarType) -> AST f v c TheVarType,
+    --List of vars that the variable being abstracted was compared to
+    abs1Preds    :: [Either (String, Section, Slice) Int],
+    --EqPreds that were encountered when scanning boolean conditions
     abs1newPreds :: [EqPred]
 }
 
@@ -184,14 +187,14 @@ abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass sig
     abs1    = error "abs1 called on signal"
     abs2    = error "abs2 called on signal"
     pass    = error "pass called on signal"
-    sig var = SignalReturn pass abs1
+    sig var = undefined --SignalReturn pass abs1
         where
         pass = passValTSL valExp
         abs1 = valExprToTSL valExp
 abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass sig
     where
-    abs1 absVar 
-        | absVar == var = valExprToTSL valExp
+    abs1 absVar
+        | absVar == var = valExprToTSL valExp 
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 = error "Invariant broken: abs2 called on an assignment"
     pass varr 
@@ -212,7 +215,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
             | absVar `elem` hd = Abs1Return tsl preds (nub $ concatMap snd conds' ++ concatMap abs1newPreds abs1ress)
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
                 where
-                abs1ress   = map ($ absVar) caseabs1s
+                abs1ress   = map (\f -> f absVar) caseabs1s
                 tsl c func = Backend.Case $ zip (map fst conds') $ map (uncurry f . (($ c) . abs1Tsl &&& abs1Preds))  abs1ress
                     where
                     f tslcase preds = Backend.Conj $ if' c (map (Backend.Not . func) (allPreds \\ preds)) [] ++ [tslcase func]
@@ -221,7 +224,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
                 preds      = nub $ concatMap abs1Preds abs1ress
         abs2 lv rv = Abs2Return tsl preds
             where
-            rec   = map (($ lv) >>> ($ rv)) caseabs2s
+            rec   = map (\f -> f lv rv) caseabs2s
             tsl v = Backend.Case $ zip (map fst conds) (map (($ v) . abs2Tsl) rec)
             preds = nub $ concat $ map abs2Preds rec ++ map snd conds
         pass var  = f <$> sequence rec
@@ -244,18 +247,18 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             f vars func = Map.fromList (map (,func) vars)
             g :: (a, b) -> c -> (a, (c, b))
             g (x, y) z  = (x, (z, y))
-        abs1 absVar
-            | absVar `elem` allVars = abs1Ret (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup absVar theMap) absVar
+        abs1 absVar 
+            | absVar `elem` allVars = abs1Ret (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup absVar theMap) absVar 
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
-        abs2 lv rv 
-            | fst lres == fst rres  = abs2 lv rv
+        abs2 lv rv
+            | fst lres == fst rres  = abs2 lv rv --TODO this cant possibly be right
             | otherwise             = Abs2Return tsl newPreds
             where
             getRet var      = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
+            lres            = getRet lv 
+            rres            = getRet rv
             labs1ret        = abs1Ret (snd lres) lv
             rabs1ret        = abs1Ret (snd rres) rv
-            lres            = getRet lv
-            rres            = getRet rv
             (tsl, newPreds) = equalityValue lv rv labs1ret rabs1ret
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
         sig      = error "not implemented"
@@ -265,6 +268,12 @@ doExists vars func = doExists' vars Map.empty
     where
     doExists' [] accum     = func (flip fjml accum)
     doExists' (x:xs) accum = Exists $ \v -> doExists' xs (Map.insert x (QuantLit v) accum)
+
+restrict :: Slice -> Slice -> Slice
+restrict Nothing          Nothing        = Nothing
+restrict Nothing          (Just sl)      = Just sl
+restrict (Just sl)        Nothing        = Just sl
+restrict (Just (x1, x2)) (Just (y1, y2)) = Just (x1 + y1, y1 + x1 - x2)
 
 equalityValue :: String -> String -> Abs1Return f v c -> Abs1Return f v c -> (f -> AST f v c TheVarType, [EqPred])
 equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
@@ -279,16 +288,17 @@ equalityValue lv rv labs1ret rabs1ret = (tsl, newPreds)
         func p1 p2 = (\v -> [($ p1), ($ p2), const $ XNor (Backend.EqConst (Left v) 1) tsl], pred) 
             where
             (tsl, pred) = func' p1 p2
-            func' (Left (r1, sect1)) (Left (r2, sect2))   
-                | r1==r2    = (T, Nothing)
-                | otherwise = varEqOne *** Just $ eSectVarPred sect1 sect2 r1 r2 
-            func' (Left (r1, sect)) (Right r2)        = varEqOne *** Just $ eSectConstPred sect r1 r2 
-            func' (Right r1)        (Left (r2, sect)) = varEqOne *** Just $ eSectConstPred sect r2 r1 
-            func' (Right r1)        (Right r2)        = (if' (r1==r2) T F, Nothing)
+            func' (Left (r1, sect1, s1)) (Left (r2, sect2, s2))   
+                | r1==r2 && s1==s2 = (T, Nothing)
+                | otherwise        = varEqOne *** Just $ eSectVarPred sect1 sect2 r1 s1 r2 s2
+            func' (Left (r1, sect, s1)) (Right r2)            = varEqOne *** Just $ eSectConstPred sect r1 s1 r2 
+            func' (Right r1)            (Left (r2, sect, s2)) = varEqOne *** Just $ eSectConstPred sect r2 s2 r1 
+            func' (Right r1)            (Right r2)            = (if' (r1==r2) T F, Nothing)
 
-equalityConst :: Abs1Return f v c -> Int -> f -> AST f v c TheVarType
-equalityConst Abs1Return{..} int v = abs1Tsl False func
+equalityConst :: Abs1Return f v c -> Maybe (Int, Int) -> Int -> f -> AST f v c TheVarType
+equalityConst Abs1Return{..} s int v = abs1Tsl False func
     where
-    func (Left (name, sect)) = Backend.EqConst (Left v) 1 `Backend.XNor` varEqOne (fst $ eSectConstPred sect name int)
-    func (Right c)           = Backend.EqConst (Left v) 1 `Backend.XNor` if' (c==int) T F
+    --Argument of func is the value of the variable represented by the Abs1Return has been asigned to
+    func (Left (name, sect, sl)) = Backend.EqConst (Left v) 1 `Backend.XNor` varEqOne (fst $ eSectConstPred sect name (restrict s sl) int)
+    func (Right c)               = Backend.EqConst (Left v) 1 `Backend.XNor` if' (c==int) T F --TODO do the slice
 

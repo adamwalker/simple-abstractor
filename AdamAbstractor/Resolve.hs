@@ -7,6 +7,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Traversable
 import Control.Arrow
+import Data.List
 
 import AdamAbstractor.AST
 import AdamAbstractor.Analysis
@@ -32,11 +33,22 @@ doDecls sd ld od = Map.unions [Map.fromList $ concatMap (go StateSection) sd, Ma
         sz      = doTypeSz vtype
         consts  = doTypeconsts vtype
 
+--Logarithm to base 2. Equivalent to floor(log2(x))
+log2 :: Int -> Int
+log2 0 = 0
+log2 1 = 0
+log2 n 
+    | n>1 = 1 + log2 (n `div` 2)
+    | otherwise = error "log2: negative argument"
+
+typeSize :: Int -> Int
+typeSize i = log2 (1 + i)
+
 doTypeSz BoolType      = 1
 doTypeSz (IntType n)   = n
-doTypeSz (EnumType es) = error "resolve.hs"
+doTypeSz (EnumType es) = typeSize $ length es
 
 doTypeconsts BoolType      = []
 doTypeconsts (IntType n)   = []
-doTypeconsts (EnumType es) = error "resolve.hs"
+doTypeconsts (EnumType es) = zip es [0..]
 

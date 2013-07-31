@@ -44,9 +44,9 @@ compileUpdate ce m = func <$> abstract ce
         where 
         func2 preds ops = mapM (uncurry pred) preds 
             where
-            pred (Pred (Predicate.EqVar v1 v2)) = compile m ops . abs2Tsl (abs2Ret v1 v2)       
-            pred (Pred (Predicate.EqConst v c)) = compile m ops . equalityConst (abs1Ret v) c
-            pred (Enum var)                     = compile m ops . passTSL (either (error "func") id (passRet var))
+            pred (Pred (Predicate.EqVar v1 _ v2 _)) = compile m ops . abs2Tsl (abs2Ret v1 v2) 
+            pred (Pred (Predicate.EqConst v s c))   = compile m ops . equalityConst (abs1Ret v) s c
+            pred (Enum var)                         = compile m ops . passTSL (either (error "func") id (passRet var))
 
 stdDef = emptyDef {T.reservedNames = reservedNames 
                   ,T.reservedOpNames = reservedOps
