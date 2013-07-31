@@ -51,7 +51,9 @@ log2 n
     | otherwise = error "log2: negative argument"
 
 typeSize :: Int -> Int
-typeSize i = log2 (1 + i)
+typeSize 0 = error "Enum with no items"
+typeSize 1 = error "Enum with one item"
+typeSize i = 1 + log2 (i - 1)
 
 doTypeSz BoolType      = 1
 doTypeSz (IntType n)   = n

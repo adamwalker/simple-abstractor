@@ -51,13 +51,13 @@ compileUpdate ce m = func <$> abstract ce <*> abstract ce
         func2 preds ops = mapM (uncurry pred) preds 
             where
             pred (Pred (Predicate.EqVar v1 s1 v2 s2)) x = do
-                lift $ traceST $ show $ prettyPrint $ abs2Tsl (abs2Ret dbg v1 s1 v2 s2) (text $ pack $ "next")
+                --lift $ traceST $ show $ prettyPrint $ abs2Tsl (abs2Ret dbg v1 s1 v2 s2) (text $ pack $ "next")
                 compile m ops $ abs2Tsl (abs2Ret ret v1 s1 v2 s2) x
             pred (Pred (Predicate.EqConst v s c))     x = do
-                lift $ traceST $ show $ prettyPrint $ equalityConst (abs1Ret dbg v) s c (text $ pack $ "next")
+                --lift $ traceST $ show $ prettyPrint $ equalityConst (abs1Ret dbg v) s c (text $ pack $ "next")
                 compile m ops $ equalityConst (abs1Ret ret v) s c x
             pred (Enum var)                           x = do
-                lift $ traceST $ show $ prettyPrint $ passTSL (either (error "func") id (passRet dbg var)) (text $ pack $ "next")
+                --lift $ traceST $ show $ prettyPrint $ passTSL (either (error "func") id (passRet dbg var)) (text $ pack $ "next")
                 compile m ops $ passTSL (either (error "func") id (passRet ret var)) x
 
 stdDef = emptyDef {T.reservedNames = reservedNames 
@@ -126,7 +126,7 @@ top = whiteSpace *> spec <* eof
 makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
 makeAbs m fres = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
-    theMap                    <-  doDecls stateDecls labelDecls outcomeDecls
+    theMap                    <- doDecls stateDecls labelDecls outcomeDecls
     resolved                  <- Rels <$> resolve theMap init 
                                       <*> mapM (resolve theMap) goal 
                                       <*> mapM (resolve theMap) fair 
