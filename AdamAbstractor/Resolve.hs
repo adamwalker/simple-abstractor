@@ -8,6 +8,8 @@ import Data.Map (Map)
 import Data.Traversable
 import Control.Arrow
 import Data.List
+import Control.Monad
+import Data.EitherR
 
 import AdamAbstractor.AST
 import AdamAbstractor.Analysis
@@ -24,8 +26,15 @@ func mp lit = case lit of
         Just (Right c)              -> Right $ Right $ getBits slice c
     Right x -> Right $ Right x
 
-doDecls :: [Decl] -> [Decl] -> [Decl] -> Map String (Either (VarAbsType, Section, Int) Int)
-doDecls sd ld od = Map.unions [Map.fromList $ concatMap (go StateSection) sd, Map.fromList $ concatMap (go LabelSection) ld, Map.fromList $ concatMap (go OutcomeSection) od]
+constructSymTab :: (Ord a) => [(a, b)] -> Either a (Map a b)
+constructSymTab = foldM func (Map.empty) 
+    where
+    func mp (key, val) = case Map.lookup key mp of
+        Nothing -> Right $ Map.insert key val mp
+        Just _  -> Left key
+
+doDecls :: [Decl] -> [Decl] -> [Decl] -> Either String (Map String (Either (VarAbsType, Section, Int) Int))
+doDecls sd ld od = fmapL ("Variable already exists: " ++) $ constructSymTab $ concat [concatMap (go StateSection) sd, concatMap (go LabelSection) ld, concatMap (go OutcomeSection) od]
     where
     go sect (Decl vars atyp vtype) = concatMap go' vars
         where

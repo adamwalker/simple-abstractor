@@ -126,7 +126,7 @@ top = whiteSpace *> spec <* eof
 makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
 makeAbs m fres = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
-    let theMap                =  doDecls stateDecls labelDecls outcomeDecls
+    theMap                    <-  doDecls stateDecls labelDecls outcomeDecls
     resolved                  <- Rels <$> resolve theMap init 
                                       <*> mapM (resolve theMap) goal 
                                       <*> mapM (resolve theMap) fair 
