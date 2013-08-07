@@ -82,13 +82,14 @@ data Decls = Decls {
     outcomeDecls :: [Decl]
 }
 
-lexer = T.makeTokenParser (stdDef {T.reservedNames = T.reservedNames stdDef ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS", "FAIR", "CONT"]})
+lexer = T.makeTokenParser (stdDef {T.reservedNames = T.reservedNames stdDef ++ ["STATE", "LABEL", "OUTCOME", "INIT", "GOAL", "TRANS", "FAIR", "CONT", "LABELCONSTRAINTS"]})
 
 data Rels a = Rels {
     init         :: BinExpr a,
     goal         :: [BinExpr a],
     fair         :: [BinExpr a],
     cont         :: BinExpr a,
+    slRel        :: BinExpr a,
     trans        :: CtrlExpr String a
 }
 
@@ -116,6 +117,8 @@ parseRels = Rels
     <*> sepEndBy (binExpr lexer) semi
     <*  reserved "CONT"
     <*> binExpr lexer
+    <*  reserved "LABELCONSTRAINTS"
+    <*> binExpr lexer
     <*  reserved "TRANS"
     <*> (AdamAbstractor.AST.Conj <$> sepEndBy (ctrlExpr lexer) semi)
 
@@ -131,16 +134,18 @@ makeAbs m fres = do
                                       <*> mapM (resolve theMap) goal 
                                       <*> mapM (resolve theMap) fair 
                                       <*> resolve theMap cont 
+                                      <*> resolve theMap slRel
                                       <*> resolve theMap trans
     theAbs m resolved
 
 theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
 theAbs m Rels{..}  = func <$> updateAbs
     where
-    func (R updateAbs) = Game.Abstractor {..}
-    fairAbs ops        = mapM (compileBin m ops) fair
-    goalAbs ops        = mapM (compileBin m ops) goal
-    initAbs ops        = compileBin m ops init
-    contAbs ops        = compileBin m ops cont
-    updateAbs          = compileUpdate trans m
+    func (R updateAbs)          = Game.Abstractor {..}
+    fairAbs ops                 = mapM (compileBin m ops) fair
+    goalAbs ops                 = mapM (compileBin m ops) goal
+    initAbs ops                 = compileBin m ops init
+    contAbs ops                 = compileBin m ops cont
+    updateAbs                   = compileUpdate trans m
+    stateLabelConstraintAbs ops = compileBin m ops slRel
 
