@@ -35,7 +35,7 @@ import qualified TermiteGame as Game
 import Interface
 
 compileBin :: STDdManager s u -> VarOps pdb TheVarType s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
-compileBin m ops = compile m ops . fst . binExpToTSL
+compileBin m ops = compile m ops . binExpToTSL
 
 newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType s u -> StateT pdb (ST s) ([DDNode s u])}
 
