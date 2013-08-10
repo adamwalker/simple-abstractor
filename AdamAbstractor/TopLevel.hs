@@ -69,15 +69,16 @@ stdDef = emptyDef {T.reservedNames = reservedNames
                   ,T.commentLine = "//"
                   }
 
-ts :: STDdManager s u -> RefineCommon.TheorySolver s u sp (VarType EqPred) String
+ts :: STDdManager s u -> RefineCommon.TheorySolver s u sp (VarType LabEqPred) String
 ts m = RefineCommon.TheorySolver ucs ucsl quant gvl
     where
     ucs   = const Nothing
     ucsl  = const $ const Nothing
     quant _ _ = return $ bone m
-    gvl (Pred (Predicate.EqVar x _ y _)) = [x]
-    gvl (Pred (Predicate.EqConst x _ _)) = [x]
-    gvl (Enum x)                         = []
+    gvl (Pred (Predicate.LabEqVar x _ _ _ False)) = [x]
+    gvl (Pred (Predicate.LabEqVar x _ y _ True))  = [x, y]
+    gvl (Pred (Predicate.LabEqConst x _ _))       = [x]
+    gvl (Enum x)                                  = [x]
 
 data Decls = Decls {
     stateDecls   :: [Decl],
@@ -129,7 +130,7 @@ spec = Spec <$> parseDecls <*> parseRels
 
 top = whiteSpace *> spec <* eof
 
-makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
+makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred))
 makeAbs m fres = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
     theMap                    <- doDecls stateDecls labelDecls outcomeDecls
@@ -141,7 +142,7 @@ makeAbs m fres = do
                                       <*> resolve theMap trans
     theAbs m resolved
 
-theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType EqPred))
+theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred))
 theAbs m Rels{..}  = func <$> updateAbs
     where
     func (R updateAbs)          = Game.Abstractor {..}

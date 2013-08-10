@@ -4,6 +4,7 @@ module AdamAbstractor.Predicate (
     constructVarPred, 
     constructConstPred,
     EqPred(..),
+    LabEqPred(..),
     consistencyPreds,
     VarAbsType(..),
     Section(..),
@@ -30,23 +31,23 @@ data VarType p = Enum String | Pred p
 data Section = StateSection | LabelSection | OutcomeSection
     deriving (Show, Eq, Ord)
 
-eSectVarPred :: Section -> Section -> String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) ->  BAVar (VarType EqPred) (VarType EqPred)
-eSectVarPred StateSection   StateSection   x s1 y s2 = StateVar (Pred pred) 1 where pred = constructVarPred   x s1 y s2
-eSectVarPred LabelSection   StateSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructLabelPred x s1 y s2
-eSectVarPred StateSection   LabelSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructLabelPred y s2 x s1 
-eSectVarPred OutcomeSection StateSection   x s1 y s2 = OutVar (Pred pred) 1   where pred = constructVarPred   x s1 y s2
-eSectVarPred StateSection   OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   where pred = constructVarPred   x s1 y s2
-eSectVarPred LabelSection   OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   where pred = constructVarPred   x s1 y s2
-eSectVarPred OutcomeSection LabelSection   x s1 y s2 = OutVar (Pred pred) 1   where pred = constructVarPred   x s1 y s2
-eSectVarPred LabelSection   LabelSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructVarPred   x s1 y s2
+eSectVarPred :: Section -> Section -> String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) ->  BAVar (VarType EqPred) (VarType LabEqPred)
+eSectVarPred StateSection   StateSection   x s1 y s2 = StateVar (Pred pred) 1 where pred = constructVarPred x s1 y s2
+eSectVarPred LabelSection   StateSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructLabPred x s1 y s2 False
+eSectVarPred StateSection   LabelSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructLabPred y s2 x s1 False
+eSectVarPred OutcomeSection StateSection   x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
+eSectVarPred StateSection   OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
+eSectVarPred LabelSection   OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
+eSectVarPred OutcomeSection LabelSection   x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
+eSectVarPred LabelSection   LabelSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructLabPred x s1 y s2 True
 eSectVarPred x              y              _ _  _ _  = error $ "effectiveSection: " ++ show x ++ " " ++ show y
 
-eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> BAVar (VarType EqPred) (VarType EqPred)
+eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> BAVar (VarType EqPred) (VarType LabEqPred)
 eSectConstPred StateSection   x s y = StateVar (Pred pred) 1 where pred = constructConstPred x s y
-eSectConstPred LabelSection   x s y = LabelVar (Pred pred) 1 where pred = constructConstPred x s y
-eSectConstPred OutcomeSection x s y = OutVar   (Pred pred) 1 where pred = constructConstPred x s y
+eSectConstPred LabelSection   x s y = LabelVar (Pred pred) 1 where pred = constructConstLabPred x s y
+eSectConstPred OutcomeSection x s y = OutVar   (Pred pred) 1 where pred = constructConstLabPred x s y
 
-eSectVar :: Section -> String -> Int -> BAVar (VarType EqPred) (VarType EqPred)
+eSectVar :: Section -> String -> Int -> BAVar (VarType EqPred) (VarType LabEqPred)
 eSectVar StateSection   n = StateVar (Enum n)
 eSectVar LabelSection   n = LabelVar (Enum n)
 eSectVar OutcomeSection n = OutVar   (Enum n)
@@ -61,6 +62,11 @@ data EqPred where
     EqConst :: String -> Maybe (Int, Int) -> Int    -> EqPred
     deriving (Eq, Ord)
 
+data LabEqPred where
+    LabEqVar   :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Bool -> LabEqPred
+    LabEqConst :: String -> Maybe (Int, Int) -> Int    -> LabEqPred
+    deriving (Eq, Ord)
+
 showSlice :: Slice -> String
 showSlice Nothing       = ""
 showSlice (Just (l, u)) = "[" ++ show l ++ ":" ++ show u ++ "]"
@@ -68,6 +74,10 @@ showSlice (Just (l, u)) = "[" ++ show l ++ ":" ++ show u ++ "]"
 instance Show EqPred where
     show (EqVar l s1 r s2) = l ++ showSlice s1 ++ "==" ++ r ++ showSlice s2
     show (EqConst l s1 r)  = l ++ showSlice s1 ++ "==" ++ show r
+
+instance Show LabEqPred where
+    show (LabEqVar l s1 r s2 _) = l ++ showSlice s1 ++ "==" ++ r ++ showSlice s2
+    show (LabEqConst l s1 r)    = l ++ showSlice s1 ++ "==" ++ show r
 
 constructVarPred :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> EqPred
 constructVarPred x s1 y s2
@@ -77,9 +87,14 @@ constructVarPred x s1 y s2
 constructConstPred :: String -> Maybe (Int, Int) -> Int -> EqPred
 constructConstPred = EqConst
 
---first argument is the label
-constructLabelPred :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> EqPred
-constructLabelPred = EqVar
+constructLabPred :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Bool -> LabEqPred
+constructLabPred x s1 y s2 False = LabEqVar x s1 y s2 False
+constructLabPred x s1 y s2 True
+    | x < y     = LabEqVar x s1 y s2 True
+    | otherwise = LabEqVar y s2 x s1 True
+
+constructConstLabPred :: String -> Maybe (Int, Int) -> Int -> LabEqPred
+constructConstLabPred = LabEqConst
 
 aggregate :: (Ord a) => [(a, b)] -> Map a [b]
 aggregate = foldl f Map.empty

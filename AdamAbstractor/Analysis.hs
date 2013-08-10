@@ -59,7 +59,7 @@ absBOpToTSLBOp AST.Or  = Backend.Or
 
 singleton x = [x]
 
-type TheVarType = BAVar (VarType EqPred) (VarType EqPred)
+type TheVarType = BAVar (VarType EqPred) (VarType LabEqPred)
 
 varEqOne :: TheVarType -> AST f v c TheVarType
 varEqOne x = Backend.EqConst (Right x) 1
