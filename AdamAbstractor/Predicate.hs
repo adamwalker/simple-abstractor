@@ -5,7 +5,6 @@ module AdamAbstractor.Predicate (
     constructConstPred,
     EqPred(..),
     LabEqPred(..),
-    consistencyPreds,
     VarAbsType(..),
     Section(..),
     eSectVarPred,

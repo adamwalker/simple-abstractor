@@ -57,8 +57,6 @@ data VarInfo = VarInfo {
 absBOpToTSLBOp AST.And = Backend.And
 absBOpToTSLBOp AST.Or  = Backend.Or
 
-singleton x = [x]
-
 type TheVarType = BAVar (VarType EqPred) (VarType LabEqPred)
 
 varEqOne :: TheVarType -> AST f v c TheVarType
