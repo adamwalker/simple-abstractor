@@ -8,6 +8,7 @@ import Data.Functor
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Applicative
+import Data.Either
 
 import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as T
@@ -15,8 +16,10 @@ import Text.Parsec.Language
 import Control.Monad.Trans.Either
 import Control.Error
 import Data.EitherR
-import Data.Text.Lazy hiding (intercalate, map, take, length)
+import Data.Text.Lazy hiding (intercalate, map, take, length, head)
 import Text.PrettyPrint.Leijen.Text (text)
+import Safe
+import Control.Arrow
 
 import CuddST
 import CuddExplicitDeref
@@ -33,6 +36,8 @@ import qualified RefineCommon
 --import qualified RefineReachFair
 import qualified TermiteGame as Game
 import Interface
+
+import qualified EqSMTSimple
 
 compileBin :: STDdManager s u -> VarOps pdb TheVarType s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
 compileBin m ops = compile m ops . binExpToTSL
@@ -69,11 +74,53 @@ stdDef = emptyDef {T.reservedNames = reservedNames
                   ,T.commentLine = "//"
                   }
 
-ts :: STDdManager s u -> RefineCommon.TheorySolver s u sp (VarType LabEqPred) String
-ts m = RefineCommon.TheorySolver ucs ucsl quant gvl
+type SymTab = Map String (Either (VarAbsType, Section, Int) Int)
+
+fromLeft = either id (error "fromLeft")
+
+spToLeonid :: SymTab -> EqPred -> EqSMTSimple.Pred 
+spToLeonid mp (Predicate.EqVar x sx y sy) = EqSMTSimple.EqPred (x, szx, slx) (x, szy, sly)
     where
-    ucs   = const Nothing
-    ucsl  = const $ const Nothing
+    (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
+    slx = maybe (0, szx-1) id sx
+    (_, _, szy) = fromLeft $ fromJustNote "theory solver" $ Map.lookup y mp
+    sly = maybe (0, szy-1) id sy
+spToLeonid mp (Predicate.EqConst x sx c)  = EqSMTSimple.EqConst (x, szx, slx) c
+    where
+    (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
+    slx = maybe (0, szx-1) id sx
+
+lpToLeonid :: SymTab -> LabEqPred -> EqSMTSimple.Pred 
+lpToLeonid mp (LabEqVar x sx y sy _) = EqSMTSimple.EqPred (x, szx, slx) (x, szy, sly)
+    where
+    (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
+    slx = maybe (0, szx-1) id sx
+    (_, _, szy) = fromLeft $ fromJustNote "theory solver" $ Map.lookup y mp
+    sly = maybe (0, szy-1) id sy
+lpToLeonid mp (LabEqConst x sx c)  = EqSMTSimple.EqConst (x, szx, slx) c
+    where
+    (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
+    slx = maybe (0, szx-1) id sx
+
+ts :: SymTab -> STDdManager s u -> RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String
+ts st m = RefineCommon.TheorySolver ucs ucsl quant gvl
+    where
+    ucs        = const Nothing
+    ucsl sp lp = fmap gunc $ EqSMTSimple.unsatCore $ map (spToLeonid st *** head) (mapMaybe func sp) ++ map (lpToLeonid st *** head) (mapMaybe func lp)
+        where
+        func (Enum _, _) = Nothing
+        func (Pred p, a) = Just (p, a)
+        sPreds = mapMaybe func sp
+        lPreds = mapMaybe func lp
+        theMap = Map.fromList $ map (((spToLeonid st) &&& Left) . fst) sPreds ++ map (((lpToLeonid st) &&& Right) . fst) lPreds
+        gunc :: [(EqSMTSimple.Pred, Bool)] -> ([(VarType EqPred, [Bool])], [(VarType LabEqPred, [Bool])])
+        gunc leonids = (lefts x, rights x)
+            where
+            x    = map func leonids
+            func (pred, val) = 
+                case fromJustNote "asdf" $ flip Map.lookup theMap pred of
+                    Left  x -> Left  (Pred x, [val])
+                    Right x -> Right (Pred x, [val])
     quant _ _ = return $ bone m
     gvl (Pred (Predicate.LabEqVar x _ _ _ False)) = [x]
     gvl (Pred (Predicate.LabEqVar x _ y _ True))  = [x, y]
@@ -130,7 +177,7 @@ spec = Spec <$> parseDecls <*> parseRels
 
 top = whiteSpace *> spec <* eof
 
-makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred))
+makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred), RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String)
 makeAbs m fres = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
     theMap                    <- doDecls stateDecls labelDecls outcomeDecls
@@ -140,7 +187,8 @@ makeAbs m fres = do
                                       <*> resolve theMap cont 
                                       <*> resolve theMap slRel
                                       <*> resolve theMap trans
-    theAbs m resolved
+    res1 <- theAbs m resolved
+    return (res1, ts theMap m)
 
 theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred))
 theAbs m Rels{..}  = func <$> updateAbs
