@@ -31,14 +31,14 @@ data Section = StateSection | LabelSection | OutcomeSection
     deriving (Show, Eq, Ord)
 
 eSectVarPred :: Section -> Section -> String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) ->  (BAVar (VarType EqPred) (VarType EqPred), EqPred)
-eSectVarPred StateSection   StateSection   x s1 y s2 = (StateVar (Pred pred) 1, pred) where pred = constructVarPred x s1 y s2
-eSectVarPred LabelSection   StateSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructVarPred x s1 y s2
-eSectVarPred StateSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructVarPred x s1 y s2
-eSectVarPred OutcomeSection StateSection   x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
-eSectVarPred StateSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
-eSectVarPred LabelSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
-eSectVarPred OutcomeSection LabelSection   x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred x s1 y s2
-eSectVarPred LabelSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructVarPred x s1 y s2
+eSectVarPred StateSection   StateSection   x s1 y s2 = (StateVar (Pred pred) 1, pred) where pred = constructVarPred   x s1 y s2
+eSectVarPred LabelSection   StateSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructLabelPred x s1 y s2
+eSectVarPred StateSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructLabelPred y s2 x s1 
+eSectVarPred OutcomeSection StateSection   x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred   x s1 y s2
+eSectVarPred StateSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred   x s1 y s2
+eSectVarPred LabelSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred   x s1 y s2
+eSectVarPred OutcomeSection LabelSection   x s1 y s2 = (OutVar (Pred pred) 1, pred)   where pred = constructVarPred   x s1 y s2
+eSectVarPred LabelSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, pred) where pred = constructVarPred   x s1 y s2
 eSectVarPred x              y              _ _  _ _  = error $ "effectiveSection: " ++ show x ++ " " ++ show y
 
 eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> (BAVar (VarType EqPred) (VarType EqPred), EqPred)
@@ -76,6 +76,10 @@ constructVarPred x s1 y s2
 
 constructConstPred :: String -> Maybe (Int, Int) -> Int -> EqPred
 constructConstPred = EqConst
+
+--first argument is the label
+constructLabelPred :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> EqPred
+constructLabelPred = EqVar
 
 aggregate :: (Ord a) => [(a, b)] -> Map a [b]
 aggregate = foldl f Map.empty

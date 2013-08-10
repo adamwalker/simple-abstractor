@@ -69,12 +69,15 @@ stdDef = emptyDef {T.reservedNames = reservedNames
                   ,T.commentLine = "//"
                   }
 
-ts :: STDdManager s u -> RefineCommon.TheorySolver s u sp lp
-ts m = RefineCommon.TheorySolver ucs ucsl quant
+ts :: STDdManager s u -> RefineCommon.TheorySolver s u sp (VarType EqPred) String
+ts m = RefineCommon.TheorySolver ucs ucsl quant gvl
     where
     ucs   = const Nothing
     ucsl  = const $ const Nothing
     quant _ _ = return $ bone m
+    gvl (Pred (Predicate.EqVar x _ y _)) = [x]
+    gvl (Pred (Predicate.EqConst x _ _)) = [x]
+    gvl (Enum x)                         = []
 
 data Decls = Decls {
     stateDecls   :: [Decl],
