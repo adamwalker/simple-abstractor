@@ -96,35 +96,3 @@ constructLabPred x s1 y s2 True
 constructConstLabPred :: String -> Maybe (Int, Int) -> Int -> LabEqPred
 constructConstLabPred = LabEqConst
 
-aggregate :: (Ord a) => [(a, b)] -> Map a [b]
-aggregate = foldl f Map.empty
-    where
-    f mp (a, b) = case Map.lookup a mp of
-        Just x -> Map.insert a (b:x) mp
-        Nothing -> Map.insert a [b] mp
-
-help :: Maybe [a] -> [a]
-help Nothing  = []
-help (Just x) = x
-
---Assumes predicate pairs respect an arbitrary total ordering on variables
-consistencyPreds :: [(String, String)] -> [(String, String, String)]
-consistencyPreds preds = concatMap func vars
-    where
-    set1 = Set.fromList $ map fst preds
-    vars = Set.toList set1
-    set2 = Set.fromList $ map snd preds
-    map1 = aggregate $ filter (\x -> snd x `Set.member` set1) preds
-    map2 = aggregate $ filter (\x -> fst x `Set.member` set2) preds 
-    setc = Set.fromList preds
-    func :: String -> [(String, String, String)]
-    func var = concatMap (func2 var) $ help $ Map.lookup var map1
-        where
-        func2 :: String -> String -> [(String, String, String)]
-        func2 varx vary = mapMaybe (func3 varx vary) $ fromJustNote "consistencyPreds" $ Map.lookup vary map2 
-            where
-            func3 :: String -> String -> String -> Maybe (String, String, String)
-            func3 varx vary varz 
-                | (varx, varz) `Set.member` setc = Just (varx, vary, varz)
-                | otherwise = Nothing
-
