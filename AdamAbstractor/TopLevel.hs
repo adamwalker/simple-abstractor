@@ -79,7 +79,7 @@ type SymTab = Map String (Either (VarAbsType, Section, Int) Int)
 fromLeft = either id (error "fromLeft")
 
 spToLeonid :: SymTab -> EqPred -> EqSMTSimple.Pred 
-spToLeonid mp (Predicate.EqVar x sx y sy) = EqSMTSimple.EqPred (x, szx, slx) (x, szy, sly)
+spToLeonid mp (Predicate.EqVar x sx y sy) = EqSMTSimple.EqPred (x, szx, slx) (y, szy, sly)
     where
     (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
     slx = maybe (0, szx-1) id sx
@@ -91,7 +91,7 @@ spToLeonid mp (Predicate.EqConst x sx c)  = EqSMTSimple.EqConst (x, szx, slx) c
     slx = maybe (0, szx-1) id sx
 
 lpToLeonid :: SymTab -> LabEqPred -> EqSMTSimple.Pred 
-lpToLeonid mp (LabEqVar x sx y sy _) = EqSMTSimple.EqPred (x, szx, slx) (x, szy, sly)
+lpToLeonid mp (LabEqVar x sx y sy _) = EqSMTSimple.EqPred (x, szx, slx) (y, szy, sly)
     where
     (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
     slx = maybe (0, szx-1) id sx
