@@ -16,6 +16,7 @@ import Control.Monad.State
 import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
 
+import Util
 import CuddExplicitDeref
 import Interface
 
@@ -147,7 +148,7 @@ compile m VarOps{..} = compile' where
         lift $ xeqy m x y
     compile' (EqConst x c) = do
         x <- either return getVar x
-        lift $ computeCube m x $ take (length x) $ map (testBit c) [0..]
+        lift $ computeCube m x $ bitsToBoolArrBe (length x) c
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x
         res  <- lift $ bexists m res' x
