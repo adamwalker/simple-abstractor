@@ -39,6 +39,7 @@ eSectVarPred StateSection   OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   wh
 eSectVarPred LabelSection   OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
 eSectVarPred OutcomeSection LabelSection   x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
 eSectVarPred LabelSection   LabelSection   x s1 y s2 = LabelVar (Pred pred) 1 where pred = constructLabPred x s1 y s2 True
+eSectVarPred OutcomeSection OutcomeSection x s1 y s2 = OutVar (Pred pred) 1   where pred = constructLabPred x s1 y s2 True
 eSectVarPred x              y              _ _  _ _  = error $ "effectiveSection: " ++ show x ++ " " ++ show y
 
 eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> BAVar (VarType EqPred) (VarType LabEqPred)

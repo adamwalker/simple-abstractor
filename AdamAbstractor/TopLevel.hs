@@ -16,10 +16,12 @@ import Text.Parsec.Language
 import Control.Monad.Trans.Either
 import Control.Error
 import Data.EitherR
-import Data.Text.Lazy hiding (intercalate, map, take, length, head)
+import Data.Text.Lazy hiding (intercalate, map, take, length, head, concatMap, null)
 import Text.PrettyPrint.Leijen.Text (text)
 import Safe
 import Control.Arrow
+import Data.List
+import Debug.TraceUtils
 
 import CuddST
 import CuddExplicitDeref
@@ -102,6 +104,25 @@ lpToLeonid mp (LabEqConst x sx c)  = EqSMTSimple.EqConst (x, szx, slx) c
     (_, _, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x mp
     slx = maybe (0, szx-1) id sx
 
+leonidToSP :: SymTab -> EqSMTSimple.Pred -> EqPred
+leonidToSP st (EqSMTSimple.EqPred (x, _, (sx1, sx2)) (y, _, (sy1, sy2))) = Predicate.EqVar x slx' y sly'
+    where
+    (_, StateSection, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x st
+    (_, StateSection, szy) = fromLeft $ fromJustNote "theory solver" $ Map.lookup y st
+    slx'                   = if sx2 - sx1 == szx then Nothing else Just (sx1, sx2)
+    sly'                   = if sy2 - sy1 == szy then Nothing else Just (sy1, sy2)
+leonidToSP st (EqSMTSimple.EqConst (x, _, (s1, s2)) c) = if sect==StateSection then Predicate.EqConst x sl' c else error "leonidToSP"
+    where
+    (_, sect, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x st
+    sl'            = if s2 - s1 == szx then Nothing else Just (s1, s2)
+
+compileDNF :: STDdManager s u -> VarOps pdb (BAVar (VarType EqPred) lp) s u -> [[(EqPred, Bool)]] -> StateT pdb (ST s) (DDNode s u)
+compileDNF m ops dnf = Backend.compile m ops $ Backend.Disj $ map (Backend.Conj . map func) dnf
+    where
+    func (pred, val) = Backend.EqConst (Right (StateVar (Pred pred) 1)) (boolToInt val)
+    boolToInt False = 0
+    boolToInt True  = 1
+
 ts :: SymTab -> STDdManager s u -> RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String
 ts st m = RefineCommon.TheorySolver ucs ucsl quant gvl
     where
@@ -121,7 +142,17 @@ ts st m = RefineCommon.TheorySolver ucs ucsl quant gvl
                 case fromJustNote "asdf" $ flip Map.lookup theMap pred of
                     Left  x -> Left  (Pred x, [val])
                     Right x -> Right (Pred x, [val])
-    quant _ _ = return $ bone m
+    --TODO: investigate why having this return non-true causes stupid predicates to be introduced and makes synthesis slow
+    quant preds ops = if (length p < 2) then return (bone m) else compileDNF m ops $ map (map (first $ leonidToSP st)) $ EqSMTSimple.eQuant lvars p
+        where
+        p = map (lpToLeonid st *** head) $ mapMaybe func preds
+        func (Enum _, _) = Nothing
+        func (Pred p, a) = Just (p, a)
+        lvars = nub $ concatMap (fmap funcy . gvl . fst) preds
+        --TODO: is below optimal?
+        funcy var = (var, sz, (0, sz-1))
+            where
+            (_, _, sz) = fromLeft $ fromJustNote "asdf" $ Map.lookup var st
     gvl (Pred (Predicate.LabEqVar x _ _ _ False)) = [x]
     gvl (Pred (Predicate.LabEqVar x _ y _ True))  = [x, y]
     gvl (Pred (Predicate.LabEqConst x _ _))       = [x]
