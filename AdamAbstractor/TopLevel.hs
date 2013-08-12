@@ -105,7 +105,7 @@ lpToLeonid mp (LabEqConst x sx c)  = EqSMTSimple.EqConst (x, szx, slx) c
     slx = maybe (0, szx-1) id sx
 
 leonidToSP :: SymTab -> EqSMTSimple.Pred -> EqPred
-leonidToSP st (EqSMTSimple.EqPred (x, _, (sx1, sx2)) (y, _, (sy1, sy2))) = Predicate.EqVar x slx' y sly'
+leonidToSP st (EqSMTSimple.EqPred (x, _, (sx1, sx2)) (y, _, (sy1, sy2))) = constructVarPred x slx' y sly' 
     where
     (_, StateSection, szx) = fromLeft $ fromJustNote "theory solver" $ Map.lookup x st
     (_, StateSection, szy) = fromLeft $ fromJustNote "theory solver" $ Map.lookup y st
