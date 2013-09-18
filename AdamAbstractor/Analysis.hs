@@ -239,7 +239,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             | absVar `elem` allVars = abs1Ret (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup absVar theMap) absVar 
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
         abs2 lv s1 rv s2
-            | fst lres == fst rres  = abs2 lv s1 rv s2 --TODO this cant possibly be right
+            | fst lres == fst rres  = abs2Ret (snd lres) lv s1 rv s2 
             | otherwise             = Abs2Return tsl 
             where
             getRet var      = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
