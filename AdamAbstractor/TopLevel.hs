@@ -128,7 +128,7 @@ compileDNF m ops dnf = Backend.compile m ops $ Backend.Disj $ map (Backend.Conj 
 ts :: SymTab -> STDdManager s u -> RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String
 ts st m = RefineCommon.TheorySolver ucs ucsl quant gvl
     where
-    ucs        = const Nothing
+    ucs  sp    = fmap fst $ ucsl sp []
     ucsl sp lp = fmap gunc $ EqSMTSimple.unsatCore $ map (spToLeonid st *** head) (mapMaybe func sp) ++ map (lpToLeonid st *** head) (mapMaybe func lp)
         where
         func (Enum _, _) = Nothing
