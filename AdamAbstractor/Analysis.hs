@@ -185,7 +185,10 @@ abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass sig
     abs1 absVar
         | absVar == var = valExprToTSL valExp 
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
-    abs2 = error "Invariant broken: abs2 called on an assignment"
+    abs2 lv s1 rv s2 
+        --TODO this could be done better
+        | var == lv && var == rv = Abs2Return $ equalityValue lv s1 rv s2 (abs1 lv) (abs1 rv)
+        | otherwise              = error $ "Invariant broken: " ++ lv ++ " and " ++ rv ++ " are not assigned here"
     pass varr 
         | var == varr = passValTSL valExp
         | otherwise   = error "invariant broken: pass"
