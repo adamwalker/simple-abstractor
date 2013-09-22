@@ -143,11 +143,11 @@ compile m VarOps{..} = compile' where
             y <- compile' y
             return (x, y)
     compile' (EqVar x y)   = do
-        x <- either return getVar x
-        y <- getVar y
+        x <- either return (flip getVar Nothing) x
+        y <- getVar y Nothing
         lift $ xeqy m x y
     compile' (EqConst x c) = do
-        x <- either return getVar x
+        x <- either return (flip getVar Nothing) x
         lift $ computeCube m x $ bitsToBoolArrBe (length x) c
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x
