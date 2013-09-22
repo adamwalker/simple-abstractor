@@ -41,10 +41,10 @@ import Interface
 
 import qualified EqSMTSimple
 
-compileBin :: STDdManager s u -> VarOps pdb TheVarType s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
+compileBin :: STDdManager s u -> VarOps pdb TheVarType' s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
 compileBin m ops = compile m ops . binExpToTSL
 
-newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType s u -> StateT pdb (ST s) ([DDNode s u], DDNode s u)}
+newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType' s u -> StateT pdb (ST s) ([DDNode s u], DDNode s u)}
 
 {-# NOINLINE traceST #-}
 traceST :: String -> ST s ()
@@ -121,7 +121,7 @@ leonidToSP st (EqSMTSimple.EqConst (x, _, (s1, s2)) c) = if sect==StateSection t
 compileDNF :: STDdManager s u -> VarOps pdb (BAVar (VarType EqPred) lp) s u -> [[(EqPred, Bool)]] -> StateT pdb (ST s) (DDNode s u)
 compileDNF m ops dnf = Backend.compile m ops $ Backend.Disj $ map (Backend.Conj . map func) dnf
     where
-    func (pred, val) = Backend.EqConst (Right (StateVar (Pred pred) 1)) (boolToInt val)
+    func (pred, val) = Backend.EqConst (Right ((StateVar (Pred pred) 1), undefined)) (boolToInt val)
     boolToInt False = 0
     boolToInt True  = 1
 

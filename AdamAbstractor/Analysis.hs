@@ -8,6 +8,7 @@ module AdamAbstractor.Analysis (
     binExpToTSL,
     equalityConst,
     TheVarType,
+    TheVarType',
     ValType,
     getBits
     ) where
@@ -57,7 +58,8 @@ data VarInfo = VarInfo {
 absBOpToTSLBOp AST.And = Backend.And
 absBOpToTSLBOp AST.Or  = Backend.Or
 
-type TheVarType = BAVar (VarType EqPred) (VarType LabEqPred)
+type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
+type TheVarType  = (TheVarType', Maybe String)
 
 varEqOne :: TheVarType -> AST f v c TheVarType
 varEqOne x = Backend.EqConst (Right x) 1

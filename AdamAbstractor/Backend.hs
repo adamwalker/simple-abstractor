@@ -105,7 +105,7 @@ ccase m = go (bzero m) (bzero m)
         --alive == accum', neg'
         go accum' neg' cs
 
-compile :: STDdManager s u -> VarOps pdb v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) v -> StateT pdb (ST s) (DDNode s u)
+compile :: STDdManager s u -> VarOps pdb v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) (v, Maybe String) -> StateT pdb (ST s) (DDNode s u)
 compile m VarOps{..} = compile' where
     binOp func m x y = do
         x <- compile' x
@@ -143,11 +143,11 @@ compile m VarOps{..} = compile' where
             y <- compile' y
             return (x, y)
     compile' (EqVar x y)   = do
-        x <- either return (flip getVar Nothing) x
-        y <- getVar y Nothing
+        x <- either return (uncurry getVar) x
+        y <- uncurry getVar y
         lift $ xeqy m x y
     compile' (EqConst x c) = do
-        x <- either return (flip getVar Nothing) x
+        x <- either return (uncurry getVar) x
         lift $ computeCube m x $ bitsToBoolArrBe (length x) c
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x
