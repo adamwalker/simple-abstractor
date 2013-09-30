@@ -19,7 +19,7 @@ import AdamAbstractor.AST
 import AdamAbstractor.Predicate hiding (Pred)
 
 --The lexer
-reservedNames = ["case", "true", "false", "if", "abs", "conc", "uint", "bool"]
+reservedNames = ["case", "true", "false", "else", "abs", "conc", "uint", "bool"]
 reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
 
 --Variable types
@@ -44,7 +44,7 @@ predicate t@T.TokenParser{..} =   try (Pred Eq  <$> valExpr t <* reservedOp "=="
                               <|> try (Pred Neq <$> valExpr t <* reservedOp "!=" <*> valExpr t)
 
 term      t@T.TokenParser{..} =   parens (binExpr t)
-                              <|> TrueE <$ reserved "true" 
+                              <|> TrueE <$ (reserved "true"  <|> reserved "else")
                               <|> FalseE <$ reserved "false"
                               <|> try (predicate t)
                               <?> "simple expression"
