@@ -66,7 +66,10 @@ ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) -- <|> sig
 
 --Value expressions
 
-slice     t@T.TokenParser{..} = brackets $ (,) <$> (fromIntegral <$> integer) <* colon <*> (fromIntegral <$> integer)
+slice     t@T.TokenParser{..} = brackets $ f <$> (fromIntegral <$> integer) <*> optionMaybe (colon <$ (fromIntegral <$> integer))
+    where
+    f start Nothing    = (start, start)
+    f start (Just end) = (start, end)
 slicedVar t@T.TokenParser{..} = (,) <$> identifier <*> optionMaybe (slice t)
 
 lit       t@T.TokenParser{..} = Lit   <$> ((Left <$> slicedVar t) <|> ((Right . fromIntegral) <$> integer))
