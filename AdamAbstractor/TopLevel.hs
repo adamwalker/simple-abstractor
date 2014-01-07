@@ -44,7 +44,7 @@ import qualified EqSMTSimple
 compileBin :: STDdManager s u -> VarOps pdb TheVarType' s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
 compileBin m ops = compile m ops . binExpToTSL
 
-newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType' s u -> StateT pdb (ST s) ([DDNode s u], DDNode s u)}
+newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType' s u -> StateT pdb (ST s) ([DDNode s u], DDNode s u, DDNode s u)}
 
 {-# NOINLINE traceST #-}
 traceST :: String -> ST s ()
@@ -57,7 +57,7 @@ compileUpdate ce m = func <$> abstract ce <*> abstract ce
         where 
         func2 preds ops = do
             res <- mapM (uncurry pred) preds 
-            return (res, bzero m)
+            return (res, bzero m, bone m)
             where
             pred (Pred (Predicate.EqVar v1 s1 v2 s2)) x = do
                 --lift $ traceST $ show $ prettyPrint $ abs2Tsl (abs2Ret dbg v1 s1 v2 s2) (text $ pack $ "next")
@@ -210,7 +210,7 @@ spec = Spec <$> parseDecls <*> parseRels
 
 top = whiteSpace *> spec <* eof
 
-makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred), RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String)
+makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred) (), RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String)
 makeAbs m fres = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
     theMap                    <- doDecls stateDecls labelDecls outcomeDecls
@@ -223,14 +223,17 @@ makeAbs m fres = do
     res1 <- theAbs m resolved
     return (res1, ts theMap m)
 
-theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred))
+theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred) ())
 theAbs m Rels{..}  = func <$> updateAbs
     where
-    func (R updateAbs)          = Game.Abstractor {..}
-    fairAbs ops                 = mapM (compileBin m ops) fair
-    goalAbs ops                 = mapM (compileBin m ops) goal
-    initAbs ops                 = compileBin m ops init
-    contAbs ops                 = compileBin m ops cont
-    updateAbs                   = compileUpdate trans m
-    stateLabelConstraintAbs ops = compileBin m ops slRel
+    func (R ua)          = Game.Abstractor {..}
+        where
+        fairAbs ops                 = lift $ mapM (compileBin m ops) fair
+        goalAbs ops                 = lift $ mapM (compileBin m ops) goal
+        initAbs ops                 = lift $ compileBin m ops init
+        contAbs ops                 = lift $ compileBin m ops cont
+        stateLabelConstraintAbs ops = lift $ compileBin m ops slRel
+        updateAbs x y               = lift $ ua x y
+        initialState                = ()
+    updateAbs                   =  compileUpdate trans m
 
