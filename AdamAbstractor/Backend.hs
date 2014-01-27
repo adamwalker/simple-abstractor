@@ -83,7 +83,10 @@ conj = block band bone
 disj = block bor  bzero
 
 ccase :: STDdManager s u -> [(DDNode s u, DDNode s u)] -> ST s (DDNode s u)
-ccase m = go (bzero m) (bzero m)
+ccase m x = do
+    ref $ bzero m
+    ref $ bzero m
+    go (bzero m) (bzero m) x
     where
     go accum neg [] = do
         deref m neg
