@@ -16,7 +16,7 @@ import Text.Parsec.Language
 import Control.Monad.Trans.Either
 import Control.Error
 import Data.EitherR
-import Data.Text.Lazy hiding (intercalate, map, take, length, head, concatMap, null)
+import Data.Text.Lazy hiding (intercalate, map, take, length, head, concatMap, null, words)
 import Text.PrettyPrint.Leijen.Text (text)
 import Safe
 import Control.Arrow
@@ -210,8 +210,8 @@ spec = Spec <$> parseDecls <*> parseRels
 
 top = whiteSpace *> spec <* eof
 
-makeAbs :: STDdManager s u -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred) (), RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String)
-makeAbs m fres = do
+makeAbs :: STDdManager s u -> String -> String -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred) (), RefineCommon.TheorySolver s u (VarType EqPred) (VarType LabEqPred) String)
+makeAbs m fres ivars = do
     (Spec Decls{..} Rels{..}) <- fmapL show $ parse top "" fres
     theMap                    <- doDecls stateDecls labelDecls outcomeDecls
     resolved                  <- Rels <$> resolve theMap init 
@@ -220,11 +220,11 @@ makeAbs m fres = do
                                       <*> resolve theMap cont 
                                       <*> resolve theMap slRel
                                       <*> resolve theMap trans
-    res1 <- theAbs m resolved
+    res1 <- theAbs m resolved (map (ivFunc theMap) (words ivars))
     return (res1, ts theMap m)
 
-theAbs :: STDdManager s u -> Rels ValType -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred) ())
-theAbs m Rels{..}  = func <$> updateAbs
+theAbs :: STDdManager s u -> Rels ValType -> [(VarType EqPred, Int, Maybe String)] -> Either String (Game.Abstractor s u (VarType EqPred) (VarType LabEqPred) ())
+theAbs m Rels{..} ivars = func <$> updateAbs
     where
     func (R ua)          = Game.Abstractor {..}
         where
@@ -235,5 +235,12 @@ theAbs m Rels{..}  = func <$> updateAbs
         stateLabelConstraintAbs ops = lift $ compileBin m ops slRel
         updateAbs x y               = lift $ ua x y
         initialState                = ()
+        initialVars                 = ivars
     updateAbs                   =  compileUpdate trans m
 
+ivFunc :: SymTab -> String -> (VarType EqPred, Int, Maybe String)
+ivFunc theMap var = case Map.lookup var theMap of
+    Nothing                             -> error "ivFunc: var doesnt exist"
+    Just (Right _)                      -> error "ivfunc: not a var"
+    Just (Left (_, StateSection, size)) -> (Enum var, size, Nothing)
+    Just (Left (_, _, _))               -> error "ivfunc: not a state var"
