@@ -1,27 +1,20 @@
 {-# LANGUAGE RecordWildCards, PolymorphicComponents, ScopedTypeVariables #-}
 module AdamAbstractor.TopLevel where
 
-import System.Environment
 import Control.Monad.ST
 import Control.Monad.State
-import Data.Functor
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Applicative
-import Data.Either
 
 import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as T
 import Text.Parsec.Language
-import Control.Monad.Trans.Either
 import Control.Error
-import Data.EitherR
-import Data.Text.Lazy hiding (intercalate, map, take, length, head, concatMap, null, words)
 import Text.PrettyPrint.Leijen.Text (text)
 import Safe
 import Control.Arrow
 import Data.List
-import Debug.TraceUtils
 
 import CuddST
 import CuddExplicitDeref
@@ -33,9 +26,6 @@ import AdamAbstractor.Parser
 import AdamAbstractor.Predicate as Predicate
 import AdamAbstractor.Resolve
 import qualified RefineCommon
---import qualified RefineGFP
---import qualified RefineLFP
---import qualified RefineReachFair
 import qualified TermiteGame as Game
 import Interface
 
