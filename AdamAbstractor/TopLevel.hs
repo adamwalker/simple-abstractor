@@ -68,8 +68,6 @@ stdDef = emptyDef {T.reservedNames = reservedNames
                   ,T.commentLine = "//"
                   }
 
-type SymTab = Map String (Either (VarAbsType, Section, Int) Int)
-
 fromLeft = either id (error "fromLeft")
 
 spToLeonid :: SymTab -> EqPred -> EqSMTSimple.Pred 

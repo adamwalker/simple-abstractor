@@ -1,6 +1,7 @@
 module AdamAbstractor.Resolve (
     resolve,
-    doDecls
+    doDecls,
+    SymTab
     ) where
 
 import qualified Data.Map as Map
@@ -15,10 +16,12 @@ import AdamAbstractor.AST
 import AdamAbstractor.Analysis
 import AdamAbstractor.Predicate
 
-resolve :: (Traversable t) => Map String (Either (VarAbsType, Section, Int) Int) -> t (Either (String, Slice) Int) -> Either String (t (Either VarInfo Int))
+type SymTab = Map String (Either (VarAbsType, Section, Int) Int)
+
+resolve :: (Traversable t) => SymTab -> t (Either (String, Slice) Int) -> Either String (t (Either VarInfo Int))
 resolve = traverse . func
 
-func :: Map String (Either (VarAbsType, Section, Int) Int) -> Either (String, Slice) Int -> Either String (Either VarInfo Int)
+func :: SymTab -> Either (String, Slice) Int -> Either String (Either VarInfo Int)
 func mp lit = case lit of 
     Left (str, slice) -> case Map.lookup str mp of
         Nothing                     -> Left  $ "Var doesn't exist: " ++ str
@@ -33,7 +36,7 @@ constructSymTab = foldM func (Map.empty)
         Nothing -> Right $ Map.insert key val mp
         Just _  -> Left key
 
-doDecls :: [Decl] -> [Decl] -> [Decl] -> Either String (Map String (Either (VarAbsType, Section, Int) Int))
+doDecls :: [Decl] -> [Decl] -> [Decl] -> Either String SymTab
 doDecls sd ld od = fmapL ("Variable already exists: " ++) $ constructSymTab $ concat [concatMap (go StateSection) sd, concatMap (go LabelSection) ld, concatMap (go OutcomeSection) od]
     where
     go sect (Decl vars atyp vtype) = concatMap go' vars
