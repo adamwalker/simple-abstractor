@@ -17,7 +17,7 @@ import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
 
 import Util
-import CuddExplicitDeref
+import Cudd.Imperative
 import Interface
 
 -- f   == type of anonymous free variables 

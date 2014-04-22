@@ -7,7 +7,7 @@ import Control.Applicative
 
 import Text.PrettyPrint.Leijen.Text (text)
 
-import CuddExplicitDeref
+import Cudd.Imperative
 
 import AdamAbstractor.Analysis
 import AdamAbstractor.AST hiding (Pred)

@@ -13,8 +13,7 @@ import Text.Parsec.Language
 import Control.Error
 import Safe
 
-import CuddST
-import CuddExplicitDeref
+import Cudd.Imperative
 
 import AdamAbstractor.Analysis
 import AdamAbstractor.AST hiding (Pred)

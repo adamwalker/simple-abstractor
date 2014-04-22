@@ -10,8 +10,7 @@ import Safe
 import Control.Arrow
 import Data.List
 
-import CuddST
-import CuddExplicitDeref
+import Cudd.Imperative
 
 import AdamAbstractor.Backend as Backend
 import AdamAbstractor.Predicate as Predicate
