@@ -49,7 +49,6 @@ data Rels a = Rels {
     goal         :: [BinExpr a],
     fair         :: [BinExpr a],
     cont         :: BinExpr a,
-    slRel        :: BinExpr a,
     trans        :: CtrlExpr String a
 }
 
@@ -79,8 +78,6 @@ parseRels = Rels
     <*> sepEndBy (binExpr lexer) semi
     <*  reserved "CONT"
     <*> binExpr lexer
-    <*  reserved "LABELCONSTRAINTS"
-    <*> binExpr lexer
     <*  reserved "TRANS"
     <*> (AdamAbstractor.AST.Conj <$> sepEndBy (ctrlExpr lexer) semi)
 
@@ -96,7 +93,6 @@ makeAbs m fres ivars = do
                                       <*> mapM (resolve theMap) goal 
                                       <*> mapM (resolve theMap) fair 
                                       <*> resolve theMap cont 
-                                      <*> resolve theMap slRel
                                       <*> resolve theMap trans
     res1 <- theAbs m resolved (map (ivFunc theMap) (words ivars))
     return (res1, ts theMap m)
@@ -110,7 +106,6 @@ theAbs m Rels{..} ivars = func <$> updateAbs
         goalAbs ops                 = lift $ mapM (compileBin m ops) goal
         initAbs ops                 = lift $ compileBin m ops init
         contAbs ops                 = lift $ compileBin m ops cont
-        stateLabelConstraintAbs ops = lift $ compileBin m ops slRel
         updateAbs x y               = lift $ ua x y
         initialState                = ()
         initialVars                 = ivars
