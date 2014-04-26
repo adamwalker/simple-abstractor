@@ -135,6 +135,14 @@ sliceValType slice (Right int)    = Right (getBits slice int)
 sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
 sliceVarInfo Nothing        varInfo = varInfo 
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
+
+--TODO dont ignore slice
+passValTSL2 :: ValExpr ValType -> f -> AST v c (Leaf f TheVarType)
+passValTSL2 valE vars = fmap (either id id) $ f <$$> valExprToAST valE
+    where
+    f (Left (VarInfo name Abs    sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
+    f (Left (VarInfo name NonAbs sz section slice)) = error "passValTSL2"
+    f (Right const)                                 = Backend.EqConst (Left vars) const
         
 --old
 varEqOne :: TheVarType -> AST v c (Leaf f TheVarType)
