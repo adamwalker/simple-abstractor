@@ -47,6 +47,18 @@ disjoint []       = True
 
 --the abstractor
 
+data VarInfo = VarInfo {
+    name    :: String,
+    typ     :: VarAbsType,
+    sz      :: Int,
+    section :: Section,
+    slice   :: Slice
+}
+type ValType = Either VarInfo Int
+
+type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
+type TheVarType  = (TheVarType', Maybe String)
+
 fromRight (Right x) = x
 
 varEqOne2 :: TheVarType -> Leaf f TheVarType
@@ -91,13 +103,16 @@ makePred x y = fromRight $ makePred' x y
 (<**>) = liftA2 (<*>)
 (<$$>) = fmap . fmap
 
+absBOpToTSLBOp AST.And = Backend.And
+absBOpToTSLBOp AST.Or  = Backend.Or
+
 binExprToAST :: BinExpr ValType -> AST v c (Leaf f TheVarType)
 binExprToAST TrueE                  = T
 binExprToAST FalseE                 = F
 binExprToAST (AST.Not x)            = Backend.Not $ binExprToAST x
 binExprToAST (Bin op x y)           = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
-binExprToAST (AST.Pred AST.Eq x y)  = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
-binExprToAST (AST.Pred AST.Neq x y) = Backend.Not $ fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
+binExprToAST (AST.Pred AST.Eq x y)  = handleValPred x y
+binExprToAST (AST.Pred AST.Neq x y) = Backend.Not $ handleValPred x y
 
 valExprToAST :: ValExpr ValType -> AST v c (Either (Leaf f TheVarType) ValType)
 valExprToAST (Lit l)       = Leaf (Right l)
@@ -106,9 +121,12 @@ valExprToAST (CaseV cases) = Case $ zip conds recs
     conds = map (fmap Left . binExprToAST . fst) cases
     recs  = map (valExprToAST . snd)             cases
 
-compileEquality :: AST f v ValType -> AST f v ValType -> AST f v (Leaf f TheVarType)
+--Takes two value expressions and returns the backend code that states that
+--they are equal and the new predicates that are required to make this
+--decision
+handleValPred :: ValExpr ValType -> ValExpr ValType -> AST v c (Leaf f TheVarType)
 --compileEquality x y = sequenceA $ (join .* liftM2 doEquality) <$> x <*> y
-compileEquality x y = makePred <$> x <*> y
+handleValPred x y = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
 
 sliceValType :: Maybe(Int, Int) -> ValType -> ValType 
 sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
@@ -118,60 +136,9 @@ sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
 sliceVarInfo Nothing        varInfo = varInfo 
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
         
---end
-data VarInfo = VarInfo {
-    name    :: String,
-    typ     :: VarAbsType,
-    sz      :: Int,
-    section :: Section,
-    slice   :: Slice
-}
-
-absBOpToTSLBOp AST.And = Backend.And
-absBOpToTSLBOp AST.Or  = Backend.Or
-
-type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
-type TheVarType  = (TheVarType', Maybe String)
-
+--old
 varEqOne :: TheVarType -> AST v c (Leaf f TheVarType)
 varEqOne x = eqConst (Right x) 1
-
-type ValType = Either VarInfo Int
-
---Takes two value expressions and returns the backend code that states that
---they are equal and the new predicates that are required to make this
---decision
-handleValPred :: ValExpr ValType -> ValExpr ValType -> AST v c (Leaf f TheVarType)
-handleValPred (Lit (Left (VarInfo x Abs _ sect s)))
-              (Lit (Right y)) 
-              = varEqOne $ eSectConstPred sect x s y 
-handleValPred (Lit (Left (VarInfo x NonAbs sz sect _))) 
-              (Lit (Right y)) 
-              = eqConst (Right (eSectVar sect x sz)) y
-handleValPred (Lit (Right y)) 
-              (Lit (Left (VarInfo x Abs _ sect s)))
-              = varEqOne $ eSectConstPred sect x s y 
-handleValPred (Lit (Right y)) 
-              (Lit (Left (VarInfo x NonAbs sz sect _)))  
-              = eqConst (Right (eSectVar sect x sz)) y
-handleValPred (Lit (Left (VarInfo x Abs _ sect1 s1))) 
-              (Lit (Left (VarInfo y Abs _ sect2 s2))) 
-              = varEqOne $ eSectVarPred sect1 sect2 x s1 y s2
-handleValPred (Lit (Left (VarInfo x NonAbs sz1 sect1 _))) 
-              (Lit (Left (VarInfo y NonAbs sz2 sect2 _))) 
-              = eqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
-handleValPred (Lit (Left _))  
-              (Lit (Left _))  
-              = error "handleValPred: Attempted to compare pred var and non-pred var"
-handleValPred (Lit (Right x)) 
-              (Lit (Right y)) 
-              = if' (x==y) T F
-{-
-handleValPred l r                         = equalityValue "anon1" "anon2" (uncurryValExpToTSLRet Abs1Return lr) (uncurryValExpToTSLRet Abs1Return rr)
-    where
-    lr = valExprToTSL "anon1" l
-    rr = valExprToTSL "anon2" r
--}
 
 --fromJust map lookup
 fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
