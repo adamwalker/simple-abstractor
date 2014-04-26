@@ -1,17 +1,24 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards, PolymorphicComponents #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards, PolymorphicComponents, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module AdamAbstractor.Backend (
     AST(..),
+    Leaf(..),
     prettyPrint,
     compile,
     conj,
-    disj
+    disj,
+    eqVar,
+    eqConst
     ) where
 
 import Control.Monad
 import Control.Monad.ST
 import Data.Bits
-import Control.Monad.State
+import Control.Monad.State hiding (mapM)
+import Data.Functor
+import Data.Foldable
+import Data.Traversable hiding (mapM)
+import Control.Applicative
 
 import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
@@ -20,28 +27,63 @@ import Util
 import Cudd.Imperative
 import Interface
 
--- f   == type of anonymous free variables 
 -- v   == type of single bit variables bound by exists statements 
 -- c   == type of single bit variables bound by let statements
--- var == type of free variable identifiers
-data AST f v c var = T
-                   | F
-                   | Not      (AST f v c var)
-                   | And      (AST f v c var) (AST f v c var)
-                   | Or       (AST f v c var) (AST f v c var)
-                   | Imp      (AST f v c var) (AST f v c var)
-                   | XNor     (AST f v c var) (AST f v c var)
-                   | Conj     [AST f v c var]
-                   | Disj     [AST f v c var]
-                   | Case     [(AST f v c var, AST f v c var)]
-                   | EqVar    (Either f var) var
-                   | EqConst  (Either f var) Int
-                   | Exists   (v -> AST f v c var)
-                   | QuantLit v
-                   | Let      (AST f v c var) (c -> AST f v c var)
-                   | LetLit   c
+data AST v c leaf = T
+                  | F
+                  | Not      (AST v c leaf)
+                  | And      (AST v c leaf) (AST v c leaf)
+                  | Or       (AST v c leaf) (AST v c leaf)
+                  | Imp      (AST v c leaf) (AST v c leaf)
+                  | XNor     (AST v c leaf) (AST v c leaf)
+                  | Conj     [AST v c leaf]
+                  | Disj     [AST v c leaf]
+                  | Case     [(AST v c leaf, AST v c leaf)]
+                  | Exists   (v -> AST v c leaf)
+                  | QuantLit v
+                  | Let      (AST v c leaf) (c -> AST v c leaf)
+                  | LetLit   c
+                  | Leaf     leaf
+                  deriving (Functor)
 
-prettyPrint :: Show v => AST Doc Doc Doc v -> Doc
+bind :: (l -> AST v c m) -> AST v c l -> AST v c m
+bind f T             = T
+bind f F             = F
+bind f (Not x)       = Not  (bind f x)
+bind f (And x y)     = And  (bind f x) (bind f y)
+bind f (Or x y)      = Or   (bind f x) (bind f y)
+bind f (Imp x y)     = Imp  (bind f x) (bind f y)
+bind f (XNor x y)    = XNor (bind f x) (bind f y)
+bind f (Conj xs)     = Conj $ map (bind f) xs
+bind f (Disj xs)     = Disj $ map (bind f) xs
+bind f (Case cases)  = undefined
+bind f (Exists func) = Exists $ \v -> bind f (func v)
+bind f (QuantLit x)  = QuantLit x
+bind f (Let x func)  = Let (bind f x) (\c -> bind f (func c))
+bind f (LetLit x)    = LetLit x
+bind f (Leaf x)      = f x
+
+instance Monad (AST v c) where
+    return = Leaf
+    (>>=)  = flip bind
+
+instance Applicative (AST v c) where
+    pure    = Leaf 
+    f <*> v = f `ap` v
+
+-- f   == type of anonymous free variables 
+-- var == type of free variable identifiers
+data Leaf f var   = EqVar     (Either f var) var
+                  | EqConst   (Either f var) Int
+                  | ConstLeaf Bool
+                  deriving (Foldable, Functor, Traversable)
+
+eqVar   x y = Leaf $ EqVar x y
+eqConst x y = Leaf $ EqConst x y
+
+type TheAST v c f var = AST v c (Leaf f var)
+
+prettyPrint :: Show v => AST Doc Doc (Leaf Doc v) -> Doc
 prettyPrint = prettyPrint' 0
     where
     prettyPrint' ng = prettyPrint''
@@ -58,10 +100,10 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (Case cases)  = text "case" <+> lbrace <$$> indent 4 (vcat $ map (uncurry f) cases) <$$> rbrace
             where  
             f c v =   prettyPrint'' c <+> colon <+> prettyPrint'' v <+> semi
-        prettyPrint'' (EqVar (Right x) y)   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
-        prettyPrint'' (EqVar (Left x) y)    = x <+> text "==" <+> text (pack (show y))
-        prettyPrint'' (EqConst (Right x) c) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
-        prettyPrint'' (EqConst (Left x) c)  = x <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (Leaf (EqVar (Right x) y))   = text (pack (show x)) <+> text "==" <+> text (pack (show y))
+        prettyPrint'' (Leaf (EqVar (Left x) y))    = x <+> text "==" <+> text (pack (show y))
+        prettyPrint'' (Leaf (EqConst (Right x) c)) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (Leaf (EqConst (Left x) c))  = x <+> text "==" <+> text (pack (show c))
         prettyPrint'' (Exists func) = text "exists" <+> parens (text $ pack $ "tvar" ++ show ng) <+> lbrace <$$> indent 4 (prettyPrint' (ng + 1)$ func (text $ pack $ "tvar" ++ show ng)) <$$> rbrace
         prettyPrint'' (QuantLit x)  = x
         prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
@@ -108,7 +150,7 @@ ccase m x = do
         --alive == accum', neg'
         go accum' neg' cs
 
-compile :: STDdManager s u -> VarOps pdb v s u -> AST [DDNode s u] (DDNode s u) (DDNode s u) (v, Maybe String) -> StateT pdb (ST s) (DDNode s u)
+compile :: STDdManager s u -> VarOps pdb v s u -> AST  (DDNode s u) (DDNode s u) (Leaf [DDNode s u] (v, Maybe String)) -> StateT pdb (ST s) (DDNode s u)
 compile m VarOps{..} = compile' where
     binOp func m x y = do
         x <- compile' x
@@ -145,11 +187,11 @@ compile m VarOps{..} = compile' where
             x <- compile' x
             y <- compile' y
             return (x, y)
-    compile' (EqVar x y)   = do
+    compile' (Leaf (EqVar x y))   = do
         x <- either return (uncurry getVar) x
         y <- uncurry getVar y
         lift $ xeqy m x y
-    compile' (EqConst x c) = do
+    compile' (Leaf (EqConst x c)) = do
         x <- either return (uncurry getVar) x
         lift $ computeCube m x $ bitsToBoolArrBe (length x) c
     compile' (Exists f)    = withTmp $ \x -> do

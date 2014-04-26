@@ -62,7 +62,7 @@ leonidToSP st (EqSMTSimple.EqConst (x, _, (s1, s2)) c) = if sect==StateSection t
 compileDNF :: STDdManager s u -> VarOps pdb (BAVar (VarType EqPred) lp) s u -> [[(EqPred, Bool)]] -> StateT pdb (ST s) (DDNode s u)
 compileDNF m ops dnf = Backend.compile m ops $ Backend.Disj $ map (Backend.Conj . map func) dnf
     where
-    func (pred, val) = Backend.EqConst (Right ((StateVar (Pred pred) 1), undefined)) (boolToInt val)
+    func (pred, val) = eqConst (Right ((StateVar (Pred pred) 1), undefined)) (boolToInt val)
     boolToInt False = 0
     boolToInt True  = 1
 

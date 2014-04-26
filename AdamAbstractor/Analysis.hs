@@ -1,4 +1,4 @@
-{-#LANGUAGE TupleSections, GADTs, RecordWildCards #-}
+{-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction #-}
 module AdamAbstractor.Analysis (
     VarInfo(..),
     Abs2Return(..),
@@ -14,7 +14,7 @@ module AdamAbstractor.Analysis (
     ) where
 
 import Prelude hiding (sequence)
-import Control.Applicative
+import Control.Applicative hiding ((<**>))
 import Data.Traversable
 import Control.Monad.Error hiding (sequence) 
 import qualified Data.Map as Map
@@ -47,6 +47,78 @@ disjoint []       = True
 
 --the abstractor
 
+fromRight (Right x) = x
+
+varEqOne2 :: TheVarType -> Leaf f TheVarType
+varEqOne2 x = Backend.EqConst (Right x) 1
+
+--conversion to AST
+makePred :: ValType -> ValType -> Leaf f TheVarType
+makePred x y = fromRight $ makePred' x y
+    where
+    makePred' (Left (VarInfo x Abs sz sect slice))
+             (Right y) 
+             = Right $ varEqOne2 $ eSectConstPred sect x slice y 
+
+    makePred' (Left (VarInfo x NonAbs sz sect slice)) 
+             (Right y) 
+             = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
+
+    makePred' (Right y) 
+             (Left (VarInfo x Abs sz sect slice))
+             = Right $ varEqOne2 $ eSectConstPred sect x slice y 
+
+    makePred' (Right y) 
+             (Left (VarInfo x NonAbs sz sect slice))  
+             = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
+
+    makePred' (Left (VarInfo x Abs sz1 sect1 slice1)) 
+             (Left (VarInfo y Abs sz2 sect2 slice2)) 
+             = Right $ varEqOne2 $ eSectVarPred sect1 sect2 x slice1 y slice2
+
+    makePred' (Left (VarInfo x NonAbs sz1 sect1 slice1)) 
+             (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
+             = Right $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
+
+    makePred' (Left _)  
+             (Left _)  
+             = Left "handleValPred: Attempted to compare pred var and non-pred var"
+
+    makePred' (Right x) 
+             (Right y) 
+             = Right $ ConstLeaf $ if' (x==y) True False
+
+(<**>) = liftA2 (<*>)
+(<$$>) = fmap . fmap
+
+binExprToAST :: BinExpr ValType -> AST v c (Leaf f TheVarType)
+binExprToAST TrueE                  = T
+binExprToAST FalseE                 = F
+binExprToAST (AST.Not x)            = Backend.Not $ binExprToAST x
+binExprToAST (Bin op x y)           = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
+binExprToAST (AST.Pred AST.Eq x y)  = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
+binExprToAST (AST.Pred AST.Neq x y) = Backend.Not $ fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
+
+valExprToAST :: ValExpr ValType -> AST v c (Either (Leaf f TheVarType) ValType)
+valExprToAST (Lit l)       = Leaf (Right l)
+valExprToAST (CaseV cases) = Case $ zip conds recs
+    where
+    conds = map (fmap Left . binExprToAST . fst) cases
+    recs  = map (valExprToAST . snd)             cases
+
+compileEquality :: AST f v ValType -> AST f v ValType -> AST f v (Leaf f TheVarType)
+--compileEquality x y = sequenceA $ (join .* liftM2 doEquality) <$> x <*> y
+compileEquality x y = makePred <$> x <*> y
+
+sliceValType :: Maybe(Int, Int) -> ValType -> ValType 
+sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
+sliceValType slice (Right int)    = Right (getBits slice int)
+
+sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
+sliceVarInfo Nothing        varInfo = varInfo 
+sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
+        
+--end
 data VarInfo = VarInfo {
     name    :: String,
     typ     :: VarAbsType,
@@ -61,33 +133,33 @@ absBOpToTSLBOp AST.Or  = Backend.Or
 type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
 type TheVarType  = (TheVarType', Maybe String)
 
-varEqOne :: TheVarType -> AST f v c TheVarType
-varEqOne x = Backend.EqConst (Right x) 1
+varEqOne :: TheVarType -> AST v c (Leaf f TheVarType)
+varEqOne x = eqConst (Right x) 1
 
 type ValType = Either VarInfo Int
 
 --Takes two value expressions and returns the backend code that states that
 --they are equal and the new predicates that are required to make this
 --decision
-handleValPred :: ValExpr ValType -> ValExpr ValType -> AST f v c TheVarType
+handleValPred :: ValExpr ValType -> ValExpr ValType -> AST v c (Leaf f TheVarType)
 handleValPred (Lit (Left (VarInfo x Abs _ sect s)))
               (Lit (Right y)) 
               = varEqOne $ eSectConstPred sect x s y 
 handleValPred (Lit (Left (VarInfo x NonAbs sz sect _))) 
               (Lit (Right y)) 
-              = Backend.EqConst (Right (eSectVar sect x sz)) y
+              = eqConst (Right (eSectVar sect x sz)) y
 handleValPred (Lit (Right y)) 
               (Lit (Left (VarInfo x Abs _ sect s)))
               = varEqOne $ eSectConstPred sect x s y 
 handleValPred (Lit (Right y)) 
               (Lit (Left (VarInfo x NonAbs sz sect _)))  
-              = Backend.EqConst (Right (eSectVar sect x sz)) y
+              = eqConst (Right (eSectVar sect x sz)) y
 handleValPred (Lit (Left (VarInfo x Abs _ sect1 s1))) 
               (Lit (Left (VarInfo y Abs _ sect2 s2))) 
               = varEqOne $ eSectVarPred sect1 sect2 x s1 y s2
 handleValPred (Lit (Left (VarInfo x NonAbs sz1 sect1 _))) 
               (Lit (Left (VarInfo y NonAbs sz2 sect2 _))) 
-              = Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
+              = eqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
 handleValPred (Lit (Left _))  
               (Lit (Left _))  
               = error "handleValPred: Attempted to compare pred var and non-pred var"
@@ -101,7 +173,7 @@ handleValPred l r                         = equalityValue "anon1" "anon2" (uncur
     rr = valExprToTSL "anon2" r
 -}
 
-binExpToTSL :: BinExpr ValType -> AST f v c TheVarType
+binExpToTSL :: BinExpr ValType -> AST v c (Leaf f TheVarType)
 binExpToTSL TrueE                  = T
 binExpToTSL FalseE                 = F
 binExpToTSL (AST.Not x)            = Backend.Not $ binExpToTSL x
@@ -129,9 +201,9 @@ valExprToTSL (CaseV cases)                                 = Abs1Return tsl allP
     allPreds = nub $ concatMap abs1Preds ccases
 
 passValTSL :: ValExpr ValType -> Either String (PassThroughReturn f v c)
-passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> Backend.EqVar (Left v) (eSectVar sect var sz)) [] [var]
+passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> eqVar (Left v) (eSectVar sect var sz)) [] [var]
 passValTSL (Lit (Left (VarInfo var Abs _ sect _)))     = error "passValTSL: abstracted variable"
-passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> Backend.EqConst (Left v) int) [int] []
+passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> eqConst (Left v) int) [int] []
 passValTSL (CaseV cases)                               = f <$> sequence recs
     where
     conds  = map (binExpToTSL . fst) cases
@@ -144,17 +216,17 @@ passValTSL (CaseV cases)                               = f <$> sequence recs
 
 data Abs1Return f v c = Abs1Return {
     --The update expressions
-    abs1Tsl      :: Bool -> (Either (String, Section, Slice) Int -> AST f v c TheVarType) -> AST f v c TheVarType,
+    abs1Tsl      :: Bool -> (Either (String, Section, Slice) Int -> AST v c (Leaf f TheVarType)) -> AST v c (Leaf f TheVarType),
     --List of vars that the variable being abstracted was compared to
     abs1Preds    :: [Either (String, Section, Slice) Int]
 }
 
 data Abs2Return f v c = Abs2Return {
-    abs2Tsl   :: f -> AST f v c TheVarType
+    abs2Tsl   :: f -> AST v c (Leaf f TheVarType)
 }
 
 data PassThroughReturn f v c = PassThroughReturn {
-    passTSL   :: f -> AST f v c TheVarType,
+    passTSL   :: f -> AST v c (Leaf f TheVarType),
     passInts  :: [Int],
     passVars  :: [String]
 }
@@ -256,7 +328,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
         pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
         sig      = error "not implemented"
 
-doExists :: (Ord a) => [a] -> ((a -> AST f v c x) -> AST f v c x) -> AST f v c x
+doExists :: (Ord a) => [a] -> ((a -> AST v c (Leaf f x)) -> AST v c (Leaf f x)) -> AST v c (Leaf f x)
 doExists vars func = doExists' vars Map.empty
     where
     doExists' [] accum     = func (flip fjml accum)
@@ -272,7 +344,7 @@ getBits :: Slice -> Int -> Int
 getBits Nothing x       = x
 getBits (Just (l, u)) x = (shift (-l) x) .&. (2 ^ (u - l + 1) - 1)
 
-equalityValue :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Abs1Return f v c -> Abs1Return f v c -> (f -> AST f v c TheVarType)
+equalityValue :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Abs1Return f v c -> Abs1Return f v c -> (f -> AST v c (Leaf f TheVarType))
 equalityValue lv s1Var rv s2Var labs1ret rabs1ret = tsl
     where
     tsl v        = doExists allPreds (\mp -> Backend.Conj [abs1Tsl labs1ret True (mp . (lv,)), abs1Tsl rabs1ret True (mp . (rv,)), theExpr v mp])
@@ -281,7 +353,7 @@ equalityValue lv s1Var rv s2Var labs1ret rabs1ret = tsl
     cartProd     = [(x, y) | x <- abs1Preds labs1ret, y <- abs1Preds rabs1ret]
     tsls         = map (uncurry func) cartProd
         where
-        func p1 p2 = (\v -> [($ (lv, p1)), ($ (rv, p2)), const $ XNor (Backend.EqConst (Left v) 1) tsl]) 
+        func p1 p2 = (\v -> [($ (lv, p1)), ($ (rv, p2)), const $ XNor (eqConst (Left v) 1) tsl]) 
             where
             tsl = func' p1 p2
             func' (Left (r1, sect1, s1)) (Left (r2, sect2, s2))   
@@ -291,10 +363,10 @@ equalityValue lv s1Var rv s2Var labs1ret rabs1ret = tsl
             func' (Right r1)            (Left (r2, sect, s2))      = varEqOne $ eSectConstPred sect r2 (restrict s2Var s2) r1 
             func' (Right r1)            (Right r2)                 = if' (getBits s1Var r1 == getBits s2Var r2) T F 
 
-equalityConst :: Abs1Return f v c -> Maybe (Int, Int) -> Int -> f -> AST f v c TheVarType
+equalityConst :: Abs1Return f v c -> Maybe (Int, Int) -> Int -> f -> AST v c (Leaf f TheVarType)
 equalityConst Abs1Return{..} s int v = abs1Tsl False func
     where
     --Argument of func is the value of the variable represented by the Abs1Return has been asigned to
-    func (Left (name, sect, sl)) = Backend.EqConst (Left v) 1 `Backend.XNor` varEqOne (eSectConstPred sect name (restrict s sl) int)
-    func (Right c)               = Backend.EqConst (Left v) 1 `Backend.XNor` if' (getBits s c == int) T F 
+    func (Left (name, sect, sl)) = eqConst (Left v) 1 `Backend.XNor` varEqOne (eSectConstPred sect name (restrict s sl) int)
+    func (Right c)               = eqConst (Left v) 1 `Backend.XNor` if' (getBits s c == int) T F 
 
