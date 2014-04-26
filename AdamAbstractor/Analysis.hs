@@ -5,7 +5,7 @@ module AdamAbstractor.Analysis (
     PassThroughReturn(..),
     Return(..),
     abstract,
-    binExpToTSL,
+    binExprToAST,
     equalityConst,
     TheVarType,
     TheVarType',
@@ -173,14 +173,6 @@ handleValPred l r                         = equalityValue "anon1" "anon2" (uncur
     rr = valExprToTSL "anon2" r
 -}
 
-binExpToTSL :: BinExpr ValType -> AST v c (Leaf f TheVarType)
-binExpToTSL TrueE                  = T
-binExpToTSL FalseE                 = F
-binExpToTSL (AST.Not x)            = Backend.Not $ binExpToTSL x
-binExpToTSL (Bin op x y)           = absBOpToTSLBOp op (binExpToTSL x) (binExpToTSL y)
-binExpToTSL (AST.Pred AST.Eq x y)  = handleValPred x y
-binExpToTSL (AST.Pred AST.Neq x y) = Backend.Not $ handleValPred x y
-
 --fromJust map lookup
 fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
@@ -197,7 +189,7 @@ valExprToTSL (CaseV cases)                                 = Abs1Return tsl allP
         f tslcase preds = Backend.Conj $ if' c (map (Backend.Not . func) (allPreds \\ preds)) [] ++ [tslcase]
     conds    = conds'
     ccases   = map (valExprToTSL . snd) cases
-    conds'   = map (binExpToTSL . fst) cases
+    conds'   = map (binExprToAST . fst) cases
     allPreds = nub $ concatMap abs1Preds ccases
 
 passValTSL :: ValExpr ValType -> Either String (PassThroughReturn f v c)
@@ -206,7 +198,7 @@ passValTSL (Lit (Left (VarInfo var Abs _ sect _)))     = error "passValTSL: abst
 passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> eqConst (Left v) int) [int] []
 passValTSL (CaseV cases)                               = f <$> sequence recs
     where
-    conds  = map (binExpToTSL . fst) cases
+    conds  = map (binExprToAST . fst) cases
     recs   = map (passValTSL . snd) cases
     f recs = PassThroughReturn tsl ints vars
         where
@@ -276,7 +268,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
         caseabs1s  = map abs1Ret subcases
         caseabs2s  = map abs2Ret subcases
         casePasses = map passRet subcases
-        conds      = map (binExpToTSL . fst) cases
+        conds      = map (binExprToAST . fst) cases
         abs1 absVar 
             | absVar `elem` hd = Abs1Return tsl preds 
             | otherwise        = error $ "Invariant broken: " ++ absVar ++ " is not assigned in case"
@@ -285,7 +277,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
                 tsl c func = Backend.Case $ zip conds' $ map (uncurry f . (($ c) . abs1Tsl &&& abs1Preds))  abs1ress
                     where
                     f tslcase preds = Backend.Conj $ if' c (map (Backend.Not . func) (allPreds \\ preds)) [] ++ [tslcase func]
-                conds'     = map (binExpToTSL . fst) cases
+                conds'     = map (binExprToAST . fst) cases
                 allPreds   = nub $ concatMap abs1Preds abs1ress
                 preds      = nub $ concatMap abs1Preds abs1ress
         abs2 lv s1 rv s2 = Abs2Return tsl 
