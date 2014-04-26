@@ -193,18 +193,16 @@ valExprToTSL (CaseV cases)                                 = Abs1Return tsl allP
     allPreds = nub $ concatMap abs1Preds ccases
 
 passValTSL :: ValExpr ValType -> Either String (PassThroughReturn f v c)
-passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> eqVar (Left v) (eSectVar sect var sz)) [] [var]
+passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> eqVar (Left v) (eSectVar sect var sz))
 passValTSL (Lit (Left (VarInfo var Abs _ sect _)))     = error "passValTSL: abstracted variable"
-passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> eqConst (Left v) int) [int] []
+passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> eqConst (Left v) int) 
 passValTSL (CaseV cases)                               = f <$> sequence recs
     where
     conds  = map (binExprToAST . fst) cases
     recs   = map (passValTSL . snd) cases
-    f recs = PassThroughReturn tsl ints vars
+    f recs = PassThroughReturn tsl 
         where
         tsl v = Case $ zip conds (map (($ v) . passTSL) recs) 
-        ints  = nub $ concatMap passInts recs
-        vars  = nub $ concatMap passVars recs
 
 data Abs1Return f v c = Abs1Return {
     --The update expressions
@@ -218,9 +216,7 @@ data Abs2Return f v c = Abs2Return {
 }
 
 data PassThroughReturn f v c = PassThroughReturn {
-    passTSL   :: f -> AST v c (Leaf f TheVarType),
-    passInts  :: [Int],
-    passVars  :: [String]
+    passTSL   :: f -> AST v c (Leaf f TheVarType)
 }
 
 data SignalReturn f v c = SignalReturn {
@@ -287,7 +283,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
         pass var  = f <$> sequence rec
             where
             rec   = map ($ var) casePasses
-            f rec = PassThroughReturn (\v -> Backend.Case $ zip conds (map (($ v) . passTSL) rec)) (nub $ concatMap passInts rec) (nub $ concatMap passVars rec)
+            f rec = PassThroughReturn (\v -> Backend.Case $ zip conds (map (($ v) . passTSL) rec)) 
         sig  = error "not implemented"
 abstract (AST.Conj es) = join $ res <$> sequenceA rres
     where
