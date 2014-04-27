@@ -121,11 +121,7 @@ valExprToAST (CaseV cases) = Case $ zip conds recs
     conds = map (fmap Left . binExprToAST . fst) cases
     recs  = map (valExprToAST . snd)             cases
 
---Takes two value expressions and returns the backend code that states that
---they are equal and the new predicates that are required to make this
---decision
 handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
---compileEquality x y = sequenceA $ (join .* liftM2 doEquality) <$> x <*> y
 handleValPred x y = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
 
 sliceValType :: Maybe(Int, Int) -> ValType -> ValType 
