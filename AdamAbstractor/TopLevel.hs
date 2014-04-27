@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, PolymorphicComponents, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, PolymorphicComponents, ScopedTypeVariables, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 module AdamAbstractor.TopLevel where
 
 import Control.Monad.ST
@@ -6,6 +6,10 @@ import Control.Monad.State
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Applicative
+import Data.Foldable
+import Data.Traversable hiding (mapM)
+import Data.Bifunctor as B
+import Data.Bitraversable
 
 import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as T
@@ -44,12 +48,24 @@ data Decls = Decls {
     outcomeDecls :: [Decl]
 }
 
+data BinExp  a = BinExp  {unBinExp  :: BinExpr (ASTEqPred a)} deriving (Functor, Foldable, Traversable)
+data CtrlExp a = CtrlExp {unCtrlExp :: CtrlExpr String (ASTEqPred a) a} 
+
+instance Functor CtrlExp where
+    fmap f (CtrlExp cexp) = CtrlExp $ bimap (fmap f) f cexp
+
+instance Foldable    CtrlExp where
+    foldr = error "foldr: CtrlExp"
+
+instance Traversable CtrlExp where
+    sequenceA (CtrlExp cexp) = CtrlExp <$> bisequenceA (B.first sequenceA cexp)
+
 data Rels a = Rels {
-    init         :: BinExpr a,
-    goal         :: [BinExpr a],
-    fair         :: [BinExpr a],
-    cont         :: BinExpr a,
-    trans        :: CtrlExpr String a
+    init         :: BinExp a,
+    goal         :: [BinExp a],
+    fair         :: [BinExp a],
+    cont         :: BinExp a,
+    trans        :: CtrlExp a
 }
 
 data Spec = Spec {
@@ -71,15 +87,15 @@ parseDecls = Decls
 
 parseRels = Rels
     <$  reserved "INIT"
-    <*> binExpr lexer
+    <*> (BinExp <$> binExpr lexer)
     <*  reserved "GOAL"
-    <*> sepEndBy (binExpr lexer) semi
+    <*> sepEndBy (BinExp <$> binExpr lexer) semi
     <*  reserved "FAIR"
-    <*> sepEndBy (binExpr lexer) semi
+    <*> sepEndBy (BinExp <$> binExpr lexer) semi
     <*  reserved "CONT"
-    <*> binExpr lexer
+    <*> (BinExp <$> binExpr lexer)
     <*  reserved "TRANS"
-    <*> (AdamAbstractor.AST.Conj <$> sepEndBy (ctrlExpr lexer) semi)
+    <*> (CtrlExp <$> (AdamAbstractor.AST.Conj <$> sepEndBy (ctrlExpr lexer) semi))
 
 spec = Spec <$> parseDecls <*> parseRels
 
@@ -102,14 +118,14 @@ theAbs m Rels{..} ivars = func <$> updateAbs
     where
     func (R ua)          = Game.Abstractor {..}
         where
-        fairAbs ops                 = lift $ mapM (compileBin m ops) fair
-        goalAbs ops                 = lift $ mapM (compileBin m ops) goal
-        initAbs ops                 = lift $ compileBin m ops init
-        contAbs ops                 = lift $ compileBin m ops cont
+        fairAbs ops                 = lift $ mapM (compileBin m ops . unBinExp) fair
+        goalAbs ops                 = lift $ mapM (compileBin m ops . unBinExp) goal
+        initAbs ops                 = lift $ compileBin m ops $ unBinExp init
+        contAbs ops                 = lift $ compileBin m ops $ unBinExp cont
         updateAbs x y               = lift $ ua x y
         initialState                = ()
         initialVars                 = ivars
-    updateAbs                   =  compileUpdate trans m
+    updateAbs                   =  compileUpdate (unCtrlExp trans) m
 
 ivFunc :: SymTab -> String -> (VarType EqPred, Int, Maybe String)
 ivFunc theMap var = case Map.lookup var theMap of

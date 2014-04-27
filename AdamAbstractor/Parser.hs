@@ -40,13 +40,13 @@ decl      t@T.TokenParser{..} = Decl <$> sepBy identifier comma <* colon <*> abs
 binExpr   t@T.TokenParser{..} =   buildExpressionParser (table t) (term t)
                               <?> "expression"
 
-predicate t@T.TokenParser{..} =   try (Pred Eq  <$> valExpr t <* reservedOp "==" <*> valExpr t)
-                              <|> try (Pred Neq <$> valExpr t <* reservedOp "!=" <*> valExpr t)
+predicate t@T.TokenParser{..} =   try (ASTEqPred Eq  <$> valExpr t <* reservedOp "==" <*> valExpr t)
+                              <|> try (ASTEqPred Neq <$> valExpr t <* reservedOp "!=" <*> valExpr t)
 
 term      t@T.TokenParser{..} =   parens (binExpr t)
                               <|> TrueE <$ (reserved "true"  <|> reserved "else")
                               <|> FalseE <$ reserved "false"
-                              <|> try (predicate t)
+                              <|> try (Pred <$> predicate t)
                               <?> "simple expression"
 
 table     t@T.TokenParser{..} = [[prefix t "!"  Not]

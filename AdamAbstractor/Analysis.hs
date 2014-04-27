@@ -106,15 +106,15 @@ makePred x y = fromRight $ makePred' x y
 absBOpToTSLBOp AST.And = Backend.And
 absBOpToTSLBOp AST.Or  = Backend.Or
 
-binExprToAST :: BinExpr ValType -> AST v c (Leaf f TheVarType)
+binExprToAST :: BinExpr (ASTEqPred ValType) -> AST v c (Leaf f TheVarType)
 binExprToAST TrueE                  = T
 binExprToAST FalseE                 = F
 binExprToAST (AST.Not x)            = Backend.Not $ binExprToAST x
 binExprToAST (Bin op x y)           = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
-binExprToAST (AST.Pred AST.Eq x y)  = handleValPred x y
-binExprToAST (AST.Pred AST.Neq x y) = Backend.Not $ handleValPred x y
+binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = handleValPred x y
+binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ handleValPred x y
 
-valExprToAST :: ValExpr ValType -> AST v c (Either (Leaf f TheVarType) ValType)
+valExprToAST :: ValExpr (ASTEqPred ValType) ValType -> AST v c (Either (Leaf f TheVarType) ValType)
 valExprToAST (Lit l)       = Leaf (Right l)
 valExprToAST (CaseV cases) = Case $ zip conds recs
     where
@@ -124,7 +124,7 @@ valExprToAST (CaseV cases) = Case $ zip conds recs
 --Takes two value expressions and returns the backend code that states that
 --they are equal and the new predicates that are required to make this
 --decision
-handleValPred :: ValExpr ValType -> ValExpr ValType -> AST v c (Leaf f TheVarType)
+handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
 --compileEquality x y = sequenceA $ (join .* liftM2 doEquality) <$> x <*> y
 handleValPred x y = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
 
@@ -137,7 +137,7 @@ sliceVarInfo Nothing        varInfo = varInfo
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
 --TODO dont ignore slice
-passValTSL2 :: ValExpr ValType -> f -> AST v c (Leaf f TheVarType)
+passValTSL2 :: ValExpr (ASTEqPred ValType) ValType -> f -> AST v c (Leaf f TheVarType)
 passValTSL2 valE vars = fmap (either id id) $ f <$$> valExprToAST valE
     where
     f (Left (VarInfo name Abs    sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
@@ -153,7 +153,7 @@ fjml k mp = fromJustNote "fjml" $ Map.lookup k mp
 
 --Used to compile value expressions into TSL and NS preds containing the
 --absVar argument as the NS element
-valExprToTSL :: ValExpr ValType -> Abs1Return f v c
+valExprToTSL :: ValExpr (ASTEqPred ValType) ValType -> Abs1Return f v c
 valExprToTSL (Lit (Left (VarInfo name Abs _ sect s1)))     = Abs1Return (const ($ Left (name, sect, s1))) [Left (name, sect, s1)] 
 valExprToTSL (Lit (Left (VarInfo name NonAbs sz sect s1))) = error "valExprToTSL with a non-pred variable"
 valExprToTSL (Lit (Right int))                             = Abs1Return (const ($ Right int)) [Right int] 
@@ -167,7 +167,7 @@ valExprToTSL (CaseV cases)                                 = Abs1Return tsl allP
     conds'   = map (binExprToAST . fst) cases
     allPreds = nub $ concatMap abs1Preds ccases
 
-passValTSL :: ValExpr ValType -> Either String (PassThroughReturn f v c)
+passValTSL :: ValExpr (ASTEqPred ValType) ValType -> Either String (PassThroughReturn f v c)
 passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> eqVar (Left v) (eSectVar sect var sz))
 passValTSL (Lit (Left (VarInfo var Abs _ sect _)))     = error "passValTSL: abstracted variable"
 passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> eqConst (Left v) int) 
@@ -207,7 +207,7 @@ data Return f v c = Return {
     sigRet  :: String -> SignalReturn f v c
 }
 
-abstract :: CtrlExpr String ValType -> Either String (Return f v c)
+abstract :: CtrlExpr String (ASTEqPred ValType) ValType -> Either String (Return f v c)
 abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass sig
     where
     abs1    = error "abs1 called on signal"

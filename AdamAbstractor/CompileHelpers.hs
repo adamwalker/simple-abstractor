@@ -19,12 +19,12 @@ import Interface
 traceST :: String -> ST s ()
 traceST = unsafeIOToST . putStrLn
 
-compileBin :: STDdManager s u -> VarOps pdb TheVarType' s u -> BinExpr ValType -> StateT pdb (ST s) (DDNode s u)
+compileBin :: STDdManager s u -> VarOps pdb TheVarType' s u -> BinExpr (ASTEqPred ValType) -> StateT pdb (ST s) (DDNode s u)
 compileBin m ops = compile m ops . binExprToAST
 
 newtype R s u = R {unR :: forall pdb. [(VarType EqPred, [DDNode s u])] -> VarOps pdb TheVarType' s u -> StateT pdb (ST s) ([DDNode s u], DDNode s u)}
 
-compileUpdate :: CtrlExpr String ValType -> STDdManager s u -> Either String (R s u)
+compileUpdate :: CtrlExpr String (ASTEqPred ValType) ValType -> STDdManager s u -> Either String (R s u)
 compileUpdate ce m = func <$> abstract ce <*> abstract ce
     where
     func ret dbg = R func2
