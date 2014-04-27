@@ -140,8 +140,8 @@ sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict 
 passValTSL2 :: ValExpr (ASTEqPred ValType) ValType -> f -> AST v c (Leaf f TheVarType)
 passValTSL2 valE vars = fmap (either id id) $ f <$$> valExprToAST valE
     where
-    f (Left (VarInfo name Abs    sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
-    f (Left (VarInfo name NonAbs sz section slice)) = error "passValTSL2"
+    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL2"
+    f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
     f (Right const)                                 = Backend.EqConst (Left vars) const
         
 --old
@@ -168,16 +168,7 @@ valExprToTSL (CaseV cases)                                 = Abs1Return tsl allP
     allPreds = nub $ concatMap abs1Preds ccases
 
 passValTSL :: ValExpr (ASTEqPred ValType) ValType -> Either String (PassThroughReturn f v c)
-passValTSL (Lit (Left (VarInfo var NonAbs sz sect _))) = return $ PassThroughReturn (\v -> eqVar (Left v) (eSectVar sect var sz))
-passValTSL (Lit (Left (VarInfo var Abs _ sect _)))     = error "passValTSL: abstracted variable"
-passValTSL (Lit (Right int))                           = return $ PassThroughReturn (\v -> eqConst (Left v) int) 
-passValTSL (CaseV cases)                               = f <$> sequence recs
-    where
-    conds  = map (binExprToAST . fst) cases
-    recs   = map (passValTSL . snd) cases
-    f recs = PassThroughReturn tsl 
-        where
-        tsl v = Case $ zip conds (map (($ v) . passTSL) recs) 
+passValTSL valExpr = Right $ PassThroughReturn $ \v -> passValTSL2 valExpr v
 
 data Abs1Return f v c = Abs1Return {
     --The update expressions
