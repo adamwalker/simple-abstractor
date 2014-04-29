@@ -35,10 +35,10 @@ compileUpdate ce m = func <$> abstract ce <*> abstract ce
             where
             pred (Pred (Predicate.EqVar v1 s1 v2 s2)) x = do
                 --lift $ traceST $ show $ prettyPrint $ abs2Tsl (abs2Ret dbg v1 s1 v2 s2) (text $ pack $ "next")
-                compile m ops $ abs2Tsl (abs2Ret ret v1 s1 v2 s2) x
+                compile m ops $ abs2Ret ret v1 s1 v2 s2 x
             pred (Pred (Predicate.EqConst v s c))     x = do
                 --lift $ traceST $ show $ prettyPrint $ equalityConst (abs1Ret dbg v) s c (text $ pack $ "next")
-                compile m ops $ equalityConst (abs1Ret ret v) s c x
+                compile m ops $ equalityConst x (astRet ret v) s c
             pred (Enum var)                           x = do
                 --lift $ traceST $ show $ prettyPrint $ passTSL (either (error "func") id (passRet dbg var)) (text $ pack $ "next")
                 compile m ops $ (passValTSL3 (astRet ret var)) x
