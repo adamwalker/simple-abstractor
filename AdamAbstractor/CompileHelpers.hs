@@ -41,5 +41,5 @@ compileUpdate ce m = func <$> abstract ce <*> abstract ce
                 compile m ops $ equalityConst (abs1Ret ret v) s c x
             pred (Enum var)                           x = do
                 --lift $ traceST $ show $ prettyPrint $ passTSL (either (error "func") id (passRet dbg var)) (text $ pack $ "next")
-                compile m ops $ passTSL (either (error "func") id (passRet ret var)) x
+                compile m ops $ (passValTSL3 (astRet ret var)) x
 

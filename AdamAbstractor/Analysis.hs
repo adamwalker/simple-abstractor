@@ -10,7 +10,8 @@ module AdamAbstractor.Analysis (
     TheVarType,
     TheVarType',
     ValType,
-    getBits
+    getBits,
+    passValTSL3
     ) where
 
 import Prelude hiding (sequence)
@@ -135,6 +136,13 @@ sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict 
 --TODO dont ignore slice
 passValTSL2 :: ValExpr (ASTEqPred ValType) ValType -> f -> AST v c (Leaf f TheVarType)
 passValTSL2 valE vars = fmap (either id id) $ f <$$> valExprToAST valE
+    where
+    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL2"
+    f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
+    f (Right const)                                 = Backend.EqConst (Left vars) const
+
+passValTSL3 :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
+passValTSL3 valE vars = fmap (either id id) $ f <$$> valE
     where
     f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL2"
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
