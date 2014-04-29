@@ -2,7 +2,6 @@
 module AdamAbstractor.Analysis (
     VarInfo(..),
     Abs2Return(..),
-    PassThroughReturn(..),
     Return(..),
     abstract,
     binExprToAST,
@@ -134,17 +133,10 @@ sliceVarInfo Nothing        varInfo = varInfo
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
 --TODO dont ignore slice
-passValTSL2 :: ValExpr (ASTEqPred ValType) ValType -> f -> AST v c (Leaf f TheVarType)
-passValTSL2 valE vars = fmap (either id id) $ f <$$> valExprToAST valE
-    where
-    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL2"
-    f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
-    f (Right const)                                 = Backend.EqConst (Left vars) const
-
 passValTSL3 :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
 passValTSL3 valE vars = fmap (either id id) $ f <$$> valE
     where
-    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL2"
+    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL3"
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
     f (Right const)                                 = Backend.EqConst (Left vars) const
         
@@ -171,9 +163,6 @@ valExprToTSL (CaseV cases)                                 = Abs1Return tsl allP
     conds'   = map (binExprToAST . fst) cases
     allPreds = nub $ concatMap abs1Preds ccases
 
-passValTSL :: ValExpr (ASTEqPred ValType) ValType -> Either String (PassThroughReturn f v c)
-passValTSL valExpr = Right $ PassThroughReturn $ \v -> passValTSL2 valExpr v
-
 data Abs1Return f v c = Abs1Return {
     --The update expressions
     abs1Tsl      :: Bool -> (Either (String, Section, Slice) Int -> AST v c (Leaf f TheVarType)) -> AST v c (Leaf f TheVarType),
@@ -185,26 +174,20 @@ data Abs2Return f v c = Abs2Return {
     abs2Tsl   :: f -> AST v c (Leaf f TheVarType)
 }
 
-data PassThroughReturn f v c = PassThroughReturn {
-    passTSL   :: f -> AST v c (Leaf f TheVarType)
-}
-
 data Return f v c = Return {
     varsRet :: [String],
     abs1Ret :: String -> Abs1Return f v c,
     abs2Ret :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Abs2Return f v c,
-    passRet :: String -> Either String (PassThroughReturn f v c),
     astRet  :: String -> AST v c (Either (Leaf f TheVarType) ValType)
 }
 
 abstract :: CtrlExpr String (ASTEqPred ValType) ValType -> Either String (Return f v c)
-abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 pass astRet
+abstract (AST.Signal var valExp) = return $ Return [] abs1 abs2 astRet
     where
     abs1   = error "abs1 called on signal"
     abs2   = error "abs2 called on signal"
-    pass   = error "pass called on signal"
     astRet = error "not implemented"
-abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass astRet
+abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 astRet
     where
     abs1 absVar
         | absVar == var = valExprToTSL valExp 
@@ -212,21 +195,17 @@ abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 pass astRet
     abs2 lv s1 rv s2 
         | var == lv && var == rv = Abs2Return $ equalityValue lv s1 rv s2 (abs1 lv) (abs1 rv)
         | otherwise              = error $ "Invariant broken: " ++ lv ++ " and " ++ rv ++ " are not assigned here"
-    pass varr 
-        | var == varr = passValTSL valExp
-        | otherwise   = error "invariant broken: pass"
     astRet varr 
         | var == varr = valExprToAST valExp
         | otherwise   = error "invariant broken: astRet"
 abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
     where
     subcases     = map (abstract . snd) cases
-    res subcases = if' (all (==hd) rst) (return $ Return hd abs1 abs2 pass astR) (throwError "Different vars assigned in case branches")
+    res subcases = if' (all (==hd) rst) (return $ Return hd abs1 abs2 astR) (throwError "Different vars assigned in case branches")
         where
         (hd:rst)   = map (sort . varsRet) subcases
         caseabs1s  = map abs1Ret subcases
         caseabs2s  = map abs2Ret subcases
-        casePasses = map passRet subcases
         conds      = map (binExprToAST . fst) cases
         abs1 absVar 
             | absVar `elem` hd = Abs1Return tsl preds 
@@ -243,10 +222,6 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
             where
             rec   = map (\f -> f lv s1 rv s2) caseabs2s
             tsl v = Backend.Case $ zip conds (map (($ v) . abs2Tsl) rec)
-        pass var  = f <$> sequence rec
-            where
-            rec   = map ($ var) casePasses
-            f rec = PassThroughReturn (\v -> Backend.Case $ zip conds (map (($ v) . passTSL) rec)) 
         astR var 
             | var `elem` hd = Backend.Case $ zip conds recs
             | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned in case"
@@ -257,7 +232,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
 abstract (AST.Conj es) = join $ res <$> sequenceA rres
     where
     rres     = map abstract es
-    res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2 pass astR) (throwError "Vars assigned in case statement are not disjoint")
+    res rres = if' (disjoint allVars) (return $ Return allVars abs1 abs2 astR) (throwError "Vars assigned in case statement are not disjoint")
         where
         varsAssigned        = map varsRet rres
         allVars             = concat varsAssigned
@@ -282,7 +257,6 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             labs1ret        = abs1Ret (snd lres) lv
             rabs1ret        = abs1Ret (snd rres) rv
             tsl             = equalityValue lv s1 rv s2 labs1ret rabs1ret
-        pass var = passRet (snd $ fromJustNote "pass conj" $ Map.lookup var theMap) var
         astR var
             | var `elem` allVars = astRet (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup var theMap) var
             | otherwise          = error $ "Invariant broken: " ++ var ++ " is not assigned in CONJ"
