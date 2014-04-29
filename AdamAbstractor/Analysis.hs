@@ -124,6 +124,12 @@ valExprToAST (CaseV cases) = Case $ zip conds recs
 handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
 handleValPred x y = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
 
+--TODO: slices
+--TODO: wrong maybe
+--must at least always have an outgoing
+handleValPred2 :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Leaf f TheVarType)
+handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ fmap (either id id) $ makePred <$$> x <**> y
+
 sliceValType :: Maybe(Int, Int) -> ValType -> ValType 
 sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
 sliceValType slice (Right int)    = Right (getBits slice int)
@@ -193,7 +199,7 @@ abstract (AST.Assign var valExp) = return $ Return [var] abs1 abs2 astRet
         | absVar == var = valExprToTSL valExp 
         | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned here"
     abs2 lv s1 rv s2 
-        | var == lv && var == rv = Abs2Return $ equalityValue lv s1 rv s2 (abs1 lv) (abs1 rv)
+        | var == lv && var == rv = error "abs2 on assignment"
         | otherwise              = error $ "Invariant broken: " ++ lv ++ " and " ++ rv ++ " are not assigned here"
     astRet varr 
         | var == varr = valExprToAST valExp
@@ -249,14 +255,13 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             | otherwise             = error $ "Invariant broken: " ++ absVar ++ " is not assigned in CONJ"
         abs2 lv s1 rv s2
             | fst lres == fst rres  = abs2Ret (snd lres) lv s1 rv s2 
-            | otherwise             = Abs2Return tsl 
+            | otherwise             = Abs2Return $ \f -> handleValPred2 f lASTRet s1 rASTRet s2
             where
             getRet var      = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
             lres            = getRet lv 
             rres            = getRet rv
-            labs1ret        = abs1Ret (snd lres) lv
-            rabs1ret        = abs1Ret (snd rres) rv
-            tsl             = equalityValue lv s1 rv s2 labs1ret rabs1ret
+            lASTRet         = astRet (snd lres) lv
+            rASTRet         = astRet (snd rres) rv
         astR var
             | var `elem` allVars = astRet (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup var theMap) var
             | otherwise          = error $ "Invariant broken: " ++ var ++ " is not assigned in CONJ"
