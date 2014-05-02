@@ -61,7 +61,6 @@ varEqOne2 :: TheVarType -> Leaf f TheVarType
 varEqOne2 x = Backend.EqConst (Right x) 1
 
 --conversion to AST
---TODO: slices
 makePred :: ValType -> ValType -> Leaf f TheVarType
 makePred x y = fromRight $ makePred' x y
     where
@@ -69,6 +68,7 @@ makePred x y = fromRight $ makePred' x y
              (Right y) 
              = Right $ varEqOne2 $ eSectConstPred sect x slice y 
 
+    --TODO: slice ignored for unabstracted variables
     makePred' (Left (VarInfo x NonAbs sz sect slice)) 
              (Right y) 
              = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
@@ -77,6 +77,7 @@ makePred x y = fromRight $ makePred' x y
              (Left (VarInfo x Abs sz sect slice))
              = Right $ varEqOne2 $ eSectConstPred sect x slice y 
 
+    --TODO: slice ignored for unabstracted variables
     makePred' (Right y) 
              (Left (VarInfo x NonAbs sz sect slice))  
              = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
@@ -121,16 +122,15 @@ valExprToAST (CaseV cases) = Case $ zip conds recs
 handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
 handleValPred x y = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
 
---TODO: slices
 --must at least always have an outgoing
 handleValPred2 :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Leaf f TheVarType)
-handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ fmap (either id id) $ makePred <$$> x <**> y
+handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ fmap (either id id) $ makePred <$$> (sliceValType sx <$$> x) <**> (sliceValType sy <$$> y)
 
---TODO: slices
 equalityConst :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
 equalityConst f x sx y = XNor (eqConst (Left f) 1) $ fmap (either id id) $ func y <$$> x 
     where
     func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne2 $ eSectConstPred sect x slice const
+    --TODO: slice ignored for unabstracted variables
     func const (Left (VarInfo x NonAbs sz sect slice)) = Backend.EqConst (Right (eSectVar sect x sz)) const
     func const (Right const2)                          = ConstLeaf $ if' (const == const2) True False
 
@@ -142,7 +142,7 @@ sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
 sliceVarInfo Nothing        varInfo = varInfo 
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
---TODO dont ignore slice
+--TODO: slice ignored for unabstracted vars
 passValTSL3 :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
 passValTSL3 valE vars = fmap (either id id) $ f <$$> valE
     where
@@ -216,12 +216,15 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             | var `elem` allVars = astRet (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup var theMap) var
             | otherwise          = error $ "Invariant broken: " ++ var ++ " is not assigned in CONJ"
 
+--Slice a slice
+--The second slice gets sliced by the first slice
 restrict :: Slice -> Slice -> Slice
 restrict Nothing          Nothing        = Nothing
 restrict Nothing          (Just sl)      = Just sl
 restrict (Just sl)        Nothing        = Just sl
-restrict (Just (x1, x2)) (Just (y1, y2)) = Just (x1 + y1, y1 + x2)
+restrict (Just (x1, x2)) (Just (y1, y2)) = Just (y1 + x1, y1 + x2)
 
+--Slice an integer
 getBits :: Slice -> Int -> Int
 getBits Nothing x       = x
 getBits (Just (l, u)) x = (shift (-l) x) .&. (2 ^ (u - l + 1) - 1)
