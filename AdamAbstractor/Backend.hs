@@ -25,7 +25,7 @@ import Text.PrettyPrint.Leijen.Text
 
 import Util
 import Cudd.Imperative
-import Interface
+import Synthesis.Interface
 
 -- v   == type of single bit variables bound by exists statements 
 -- c   == type of single bit variables bound by let statements

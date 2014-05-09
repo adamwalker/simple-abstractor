@@ -2,6 +2,7 @@
 module AdamAbstractor.CompileHelpers where
 
 import Control.Monad.ST
+import Control.Monad.ST.Unsafe
 import Control.Monad.State
 import Control.Applicative
 
@@ -13,7 +14,7 @@ import AdamAbstractor.Analysis
 import AdamAbstractor.AST hiding (Pred)
 import AdamAbstractor.Backend as Backend
 import AdamAbstractor.Predicate as Predicate
-import Interface
+import Synthesis.Interface
 
 {-# NOINLINE traceST #-}
 traceST :: String -> ST s ()

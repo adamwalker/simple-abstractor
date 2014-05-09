@@ -20,7 +20,7 @@ import Data.Map (Map)
 import Safe
 import Data.Maybe
 
-import Interface
+import Synthesis.Interface
 
 type Slice = Maybe (Int, Int)
 

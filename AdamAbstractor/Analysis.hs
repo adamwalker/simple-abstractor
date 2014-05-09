@@ -25,13 +25,12 @@ import Data.Bits
 
 import Safe
 import Data.Tuple.All
-import Debug.TraceUtils
 
 import AdamAbstractor.AST as AST
 import AdamAbstractor.Predicate
 import AdamAbstractor.Backend as Backend
 
-import Interface hiding (VarInfo, NonAbs)
+import Synthesis.Interface hiding (VarInfo, NonAbs)
 
 --Utility functions
 if' True  x y = x
