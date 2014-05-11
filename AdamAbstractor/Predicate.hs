@@ -9,7 +9,8 @@ module AdamAbstractor.Predicate (
     Section(..),
     eSectVarPred,
     eSectConstPred,
-    eSectVar
+    eSectVar,
+    labEqPredVars
     ) where
 
 import qualified Data.Set as Set
@@ -66,6 +67,10 @@ data LabEqPred where
     LabEqVar   :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> Bool -> LabEqPred
     LabEqConst :: String -> Maybe (Int, Int) -> Int    -> LabEqPred
     deriving (Eq, Ord)
+
+labEqPredVars :: LabEqPred -> [String]
+labEqPredVars (LabEqVar v1 _ v2 _ _) = [v1, v2]
+labEqPredVars (LabEqConst v1 _ _)    = [v1]
 
 showSlice :: Slice -> String
 showSlice Nothing       = ""
