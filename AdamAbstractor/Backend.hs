@@ -19,6 +19,7 @@ import Data.Functor
 import Data.Foldable
 import Data.Traversable hiding (mapM)
 import Control.Applicative
+import Data.Bifunctor
 
 import Data.Text.Lazy hiding (intercalate, map, take, length)
 import Text.PrettyPrint.Leijen.Text
@@ -56,7 +57,7 @@ bind f (Imp x y)     = Imp  (bind f x) (bind f y)
 bind f (XNor x y)    = XNor (bind f x) (bind f y)
 bind f (Conj xs)     = Conj $ map (bind f) xs
 bind f (Disj xs)     = Disj $ map (bind f) xs
-bind f (Case cases)  = undefined
+bind f (Case cases)  = Case $ fmap (bimap (bind f) (bind f)) cases
 bind f (Exists func) = Exists $ \v -> bind f (func v)
 bind f (QuantLit x)  = QuantLit x
 bind f (Let x func)  = Let (bind f x) (\c -> bind f (func c))
