@@ -88,7 +88,7 @@ instance Bitraversable ValExpr where
     bisequenceA (Lit x)       = Lit   <$> x
     bisequenceA (CaseV cases) = CaseV <$> sequenceA (map (bisequenceA . bimap sequenceA bisequenceA) cases)
 
-data BinOpType = And | Or deriving (Show)
+data BinOpType = And | Or | Imp deriving (Show)
 data PredType  = Eq | Neq deriving (Show)
 
 data BinExpr p where

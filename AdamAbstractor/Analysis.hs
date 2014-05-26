@@ -102,6 +102,7 @@ makePred x y = fromRight $ makePred' x y
 
 absBOpToTSLBOp AST.And = Backend.And
 absBOpToTSLBOp AST.Or  = Backend.Or
+absBOpToTSLBOp AST.Imp = Backend.Imp
 
 binExprToAST :: BinExpr (ASTEqPred ValType) -> AST v c (Leaf f TheVarType)
 binExprToAST TrueE                  = T

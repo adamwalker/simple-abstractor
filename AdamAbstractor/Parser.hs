@@ -20,7 +20,7 @@ import AdamAbstractor.Predicate hiding (Pred)
 
 --The lexer
 reservedNames = ["case", "true", "false", "else", "abs", "conc", "uint", "bool"]
-reservedOps   = ["!", "&&", "||", "!=", "==", ":=", "<="]
+reservedOps   = ["!", "&&", "||", "->", "!=", "==", ":=", "<="]
 
 --Variable types
 boolTyp   t@T.TokenParser{..} = BoolType <$  reserved "bool"
@@ -50,8 +50,9 @@ term      t@T.TokenParser{..} =   parens (binExpr t)
                               <?> "simple expression"
 
 table     t@T.TokenParser{..} = [[prefix t "!"  Not]
-                                ,[binary t  "&&" (Bin And) AssocLeft]
-                                ,[binary t  "||" (Bin Or)  AssocLeft]
+                                ,[binary t "&&" (Bin And) AssocLeft]
+                                ,[binary t "||" (Bin Or)  AssocLeft]
+                                ,[binary t "->" (Bin Imp) AssocLeft]
                                 ]
 
 binary    t@T.TokenParser{..} name fun assoc = Infix  (fun <$ reservedOp name) assoc
