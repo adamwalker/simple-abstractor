@@ -21,12 +21,6 @@ stdDef = emptyDef {T.identStart = letter <|> char '_'
                   ,T.commentLine = "//"
                   }
 
-data Decls = Decls {
-    stateDecls   :: [Decl],
-    labelDecls   :: [Decl],
-    outcomeDecls :: [Decl]
-}
-
 data BinExp  a = BinExp  {unBinExp  :: BinExpr (ASTEqPred a)} deriving (Functor, Foldable, Traversable)
 data CtrlExp a = CtrlExp {unCtrlExp :: CtrlExpr String (ASTEqPred a) a} 
 

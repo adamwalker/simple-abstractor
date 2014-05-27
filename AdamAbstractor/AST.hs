@@ -21,7 +21,7 @@ data Type where
 data Decl = Decl {
     vars    :: [String],
     absType :: VarAbsType,
-    varType :: Type
+    varType :: Either String Type
 }
 
 --The transition section

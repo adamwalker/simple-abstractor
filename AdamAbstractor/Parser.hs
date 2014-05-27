@@ -3,6 +3,7 @@
 module AdamAbstractor.Parser (
     reservedNames,
     reservedOps,
+    typeDecl,
     decl,
     binExpr,
     ctrlExpr
@@ -27,12 +28,16 @@ boolTyp   t@T.TokenParser{..} = BoolType <$  reserved "bool"
 intTyp    t@T.TokenParser{..} = IntType  <$  reserved "uint" <*> angles (fromIntegral <$> natural)
 enumTyp   t@T.TokenParser{..} = EnumType <$> braces (sepBy identifier comma)
 typ       t@T.TokenParser{..} = boolTyp t <|> intTyp t <|> enumTyp t
+tp        t@T.TokenParser{..} = (Right <$> typ t) <|> (Left <$> identifier)
+
+--Type declarations
+typeDecl  t@T.TokenParser{..} = (,) <$> identifier <* colon <*> typ t
 
 --Variable declarations
 absTyp    t@T.TokenParser{..} = Abs <$ reserved "abs"
 nonAbsTyp t@T.TokenParser{..} = NonAbs <$ reserved "conc" 
 absTypes  t@T.TokenParser{..} = absTyp t <|> nonAbsTyp t 
-decl      t@T.TokenParser{..} = Decl <$> sepBy identifier comma <* colon <*> absTypes t <*> typ t
+decl      t@T.TokenParser{..} = Decl <$> sepBy identifier comma <* colon <*> absTypes t <*> tp t
 
 --Expressions
 

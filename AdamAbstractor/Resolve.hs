@@ -9,8 +9,9 @@ import Data.Map (Map)
 import Data.Traversable
 import Control.Arrow
 import Data.List
-import Control.Monad
+import Control.Monad as M
 import Data.EitherR
+import Control.Error.Util
 
 import AdamAbstractor.AST
 import AdamAbstractor.Analysis
@@ -32,26 +33,42 @@ func mp lit = case lit of
     Right x -> Right $ Right x
 
 --Constructing the symbol table
-constructSymTab :: (Ord a) => [(a, b)] -> Either a (Map a b)
-constructSymTab = foldM func (Map.empty) 
-    where
-    func mp (key, val) = case Map.lookup key mp of
-        Nothing -> Right $ Map.insert key val mp
-        Just _  -> Left key
+addSymbol :: (Ord a) => Map a b -> (a, b) -> Either a (Map a b)
+addSymbol mp (key, val) =  case Map.lookup key mp of
+    Nothing -> Right $ Map.insert key val mp
+    Just _  -> Left key
 
-doDecl :: Section -> Decl -> [(String, SymbolType)]
-doDecl sect (Decl vars atyp vtype) = concatMap go' vars
+addSymbols :: (Ord a) => Map a b -> [(a, b)] -> Either a (Map a b)
+addSymbols im = foldM addSymbol im 
+
+type TypeMap = Map String Int
+
+doType :: (String, Type) -> (SymTab, TypeMap) -> Either String (SymTab, TypeMap)
+doType (name, typ) (st, tm) = do
+    st' <- addSymbols st $ map (second Right) $ doTypeconsts typ
+    tm' <- addSymbol  tm (name, doTypeSz typ)
+    return (st', tm')
+
+doTypes :: [(String, Type)] -> Either String (SymTab, TypeMap)
+doTypes types = foldM (flip doType) (Map.empty, Map.empty) types
+
+doDecl :: TypeMap -> Section -> Decl -> Either String [(String, SymbolType)]
+doDecl _ sect (Decl vars atyp (Right vtype)) = return $ concatMap go' vars
     where
     go' var = (var, Left (atyp, sect, sz)) : map (second Right) consts
     sz      = doTypeSz vtype
     consts  = doTypeconsts vtype
+doDecl typMap sect (Decl vars atyp (Left typ)) = do
+    size <- note ("Type doesnt exist: " ++ typ) $ Map.lookup typ typMap
+    return $ map (\var -> (var, Left (atyp, sect, size))) vars
 
-doDecls :: [Decl] -> [Decl] -> [Decl] -> Either String SymTab
-doDecls sd ld od = fmapL ("Variable already exists: " ++) $ constructSymTab $ concat [
-    concatMap (doDecl StateSection)   sd, 
-    concatMap (doDecl LabelSection)   ld, 
-    concatMap (doDecl OutcomeSection) od
-    ]
+doDecls :: [(String, Type)] -> [Decl] -> [Decl] -> [Decl] -> Either String SymTab
+doDecls td sd ld od = fmapL ("Variable already exists: " ++) $ do
+    (st, tm) <- doTypes td
+    sd       <- M.mapM (doDecl tm StateSection)   sd
+    ld       <- M.mapM (doDecl tm LabelSection)   ld 
+    od       <- M.mapM (doDecl tm OutcomeSection) od
+    addSymbols st $ concat [concat sd, concat ld, concat od]
 
 --Logarithm to base 2. Equivalent to floor(log2(x))
 log2 :: Int -> Int
