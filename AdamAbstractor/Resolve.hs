@@ -16,8 +16,10 @@ import AdamAbstractor.AST
 import AdamAbstractor.Analysis
 import AdamAbstractor.Predicate
 
-type SymTab = Map String (Either (VarAbsType, Section, Int) Int)
+type SymbolType = Either (VarAbsType, Section, Int) Int
+type SymTab     = Map String SymbolType
 
+--Resolving symbols in the AST
 resolve :: (Traversable t) => SymTab -> t (Either (String, Slice) Int) -> Either String (t (Either VarInfo Int))
 resolve = traverse . func
 
@@ -29,6 +31,7 @@ func mp lit = case lit of
         Just (Right c)              -> Right $ Right $ getBits slice c
     Right x -> Right $ Right x
 
+--Constructing the symbol table
 constructSymTab :: (Ord a) => [(a, b)] -> Either a (Map a b)
 constructSymTab = foldM func (Map.empty) 
     where
@@ -36,14 +39,19 @@ constructSymTab = foldM func (Map.empty)
         Nothing -> Right $ Map.insert key val mp
         Just _  -> Left key
 
-doDecls :: [Decl] -> [Decl] -> [Decl] -> Either String SymTab
-doDecls sd ld od = fmapL ("Variable already exists: " ++) $ constructSymTab $ concat [concatMap (go StateSection) sd, concatMap (go LabelSection) ld, concatMap (go OutcomeSection) od]
+doDecl :: Section -> Decl -> [(String, SymbolType)]
+doDecl sect (Decl vars atyp vtype) = concatMap go' vars
     where
-    go sect (Decl vars atyp vtype) = concatMap go' vars
-        where
-        go' var = (var, Left (atyp, sect, sz)) : map (second Right) consts
-        sz      = doTypeSz vtype
-        consts  = doTypeconsts vtype
+    go' var = (var, Left (atyp, sect, sz)) : map (second Right) consts
+    sz      = doTypeSz vtype
+    consts  = doTypeconsts vtype
+
+doDecls :: [Decl] -> [Decl] -> [Decl] -> Either String SymTab
+doDecls sd ld od = fmapL ("Variable already exists: " ++) $ constructSymTab $ concat [
+    concatMap (doDecl StateSection)   sd, 
+    concatMap (doDecl LabelSection)   ld, 
+    concatMap (doDecl OutcomeSection) od
+    ]
 
 --Logarithm to base 2. Equivalent to floor(log2(x))
 log2 :: Int -> Int
