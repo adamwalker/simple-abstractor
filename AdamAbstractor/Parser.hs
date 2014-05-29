@@ -65,10 +65,9 @@ prefix    t@T.TokenParser{..} name fun       = Prefix (fun <$ reservedOp name)
 
 --Control expressions
 assign    t@T.TokenParser{..} = Assign <$> identifier <* reservedOp ":=" <*> valExpr t
-signal    t@T.TokenParser{..} = Signal <$> identifier <* reservedOp "<=" <*> valExpr t
 ccase     t@T.TokenParser{..} = CaseC  <$  reserved "case" <*> braces (sepEndBy ((,) <$> binExpr t <* colon <*> ctrlExpr t) semi)
 conj      t@T.TokenParser{..} = Conj   <$> braces (sepEndBy (ctrlExpr t) semi)
-ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) -- <|> signal t
+ctrlExpr  t@T.TokenParser{..} = conj t <|> ccase t <|> try (assign t) 
 
 --Value expressions
 

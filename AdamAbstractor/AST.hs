@@ -30,14 +30,12 @@ data Decl = Decl {
 --v = Type of atomic values
 data CtrlExpr a p v where
     Assign :: a -> ValExpr p v                 -> CtrlExpr a p v
-    Signal :: String -> ValExpr p v            -> CtrlExpr a p v
     CaseC  :: [(BinExpr p, CtrlExpr a p v)]    -> CtrlExpr a p v
     Conj   :: [CtrlExpr a p v]                 -> CtrlExpr a p v
     deriving (Functor, Foldable, Traversable)
 
 instance Bifunctor (CtrlExpr a) where
     bimap f g (Assign x y)  = Assign x (bimap f g y) 
-    bimap f g (Signal x y)  = Signal x (bimap f g y)
     bimap f g (CaseC cases) = CaseC $ map (bimap (fmap f) (bimap f g)) cases
     bimap f g (Conj  parts) = Conj  $ map (bimap f g) parts
 
@@ -46,7 +44,6 @@ instance Bifoldable (CtrlExpr a) where
 
 instance Bitraversable (CtrlExpr a) where
     bisequenceA (Assign x y)  = Assign x <$> bisequenceA y
-    bisequenceA (Signal x y)  = Signal x <$> bisequenceA y
     bisequenceA (CaseC cases) = CaseC <$> sequenceA (map (bisequenceA . bimap sequenceA bisequenceA) cases)
     bisequenceA (Conj  parts) = Conj  <$> sequenceA (map bisequenceA parts)
 

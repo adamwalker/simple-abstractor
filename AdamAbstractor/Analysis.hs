@@ -64,38 +64,38 @@ makePred :: ValType -> ValType -> Leaf f TheVarType
 makePred x y = fromRight $ makePred' x y
     where
     makePred' (Left (VarInfo x Abs sz sect slice))
-             (Right y) 
-             = Right $ varEqOne2 $ eSectConstPred sect x slice y 
+              (Right y) 
+              = Right $ varEqOne2 $ eSectConstPred sect x slice y 
 
     --TODO: slice ignored for unabstracted variables
     makePred' (Left (VarInfo x NonAbs sz sect slice)) 
-             (Right y) 
-             = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
+              (Right y) 
+              = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
 
     makePred' (Right y) 
-             (Left (VarInfo x Abs sz sect slice))
-             = Right $ varEqOne2 $ eSectConstPred sect x slice y 
+              (Left (VarInfo x Abs sz sect slice))
+              = Right $ varEqOne2 $ eSectConstPred sect x slice y 
 
     --TODO: slice ignored for unabstracted variables
     makePred' (Right y) 
-             (Left (VarInfo x NonAbs sz sect slice))  
-             = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
+              (Left (VarInfo x NonAbs sz sect slice))  
+              = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
 
     makePred' (Left (VarInfo x Abs sz1 sect1 slice1)) 
-             (Left (VarInfo y Abs sz2 sect2 slice2)) 
-             = Right $ varEqOne2 $ eSectVarPred sect1 sect2 x slice1 y slice2
+              (Left (VarInfo y Abs sz2 sect2 slice2)) 
+              = Right $ varEqOne2 $ eSectVarPred sect1 sect2 x slice1 y slice2
 
     makePred' (Left (VarInfo x NonAbs sz1 sect1 slice1)) 
-             (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
-             = Right $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
+              (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
+              = Right $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
 
     makePred' (Left _)  
-             (Left _)  
-             = Left "handleValPred: Attempted to compare pred var and non-pred var"
+              (Left _)  
+              = Left "handleValPred: Attempted to compare pred var and non-pred var"
 
     makePred' (Right x) 
-             (Right y) 
-             = Right $ ConstLeaf $ if' (x==y) True False
+              (Right y) 
+              = Right $ ConstLeaf $ if' (x==y) True False
 
 (<**>) = liftA2 (<*>)
 (<$$>) = fmap . fmap
@@ -157,10 +157,6 @@ data Return f v c = Return {
 }
 
 abstract :: CtrlExpr String (ASTEqPred ValType) ValType -> Either String (Return f v c)
-abstract (AST.Signal var valExp) = return $ Return [] abs2 astRet
-    where
-    abs2   = error "abs2 called on signal"
-    astRet = error "not implemented"
 abstract (AST.Assign var valExp) = return $ Return [var] abs2 astRet
     where
     abs2 lv s1 rv s2 
