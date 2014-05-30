@@ -129,7 +129,7 @@ handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ fmap (either id id) $ m
 equalityConst :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
 equalityConst f x sx y = XNor (eqConst (Left f) 1) $ fmap (either id id) $ func y <$$> x 
     where
-    func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne2 $ eSectConstPred sect x slice const
+    func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne2 $ eSectConstPred sect x (restrict sx slice) const
     --TODO: slice ignored for unabstracted variables
     func const (Left (VarInfo x NonAbs sz sect slice)) = Backend.EqConst (Right (eSectVar sect x sz)) const
     func const (Right const2)                          = ConstLeaf $ if' (const == const2) True False

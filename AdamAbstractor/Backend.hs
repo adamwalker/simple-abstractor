@@ -105,6 +105,7 @@ prettyPrint = prettyPrint' 0
         prettyPrint'' (Leaf (EqVar (Left x) y))    = x <+> text "==" <+> text (pack (show y))
         prettyPrint'' (Leaf (EqConst (Right x) c)) = text (pack (show x)) <+> text "==" <+> text (pack (show c))
         prettyPrint'' (Leaf (EqConst (Left x) c))  = x <+> text "==" <+> text (pack (show c))
+        prettyPrint'' (Leaf (ConstLeaf val))       = if val == True then text (pack "True") else text (pack "False")
         prettyPrint'' (Exists func) = text "exists" <+> parens (text $ pack $ "tvar" ++ show ng) <+> lbrace <$$> indent 4 (prettyPrint' (ng + 1)$ func (text $ pack $ "tvar" ++ show ng)) <$$> rbrace
         prettyPrint'' (QuantLit x)  = x
         prettyPrint'' (Let x f)     = text "let" <+> text "tmp" <+> text ":=" <+> prettyPrint'' x <+> text "in" <$$> indent 4 (prettyPrint'' $ f (text "tmp"))
@@ -195,6 +196,8 @@ compile m VarOps{..} = compile' where
     compile' (Leaf (EqConst x c)) = do
         x <- either return (uncurry getVar) x
         lift $ computeCube m x $ bitsToBoolArrBe (length x) c
+    compile' (Leaf (ConstLeaf True))  = compile' T
+    compile' (Leaf (ConstLeaf False)) = compile' F
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x
         res  <- lift $ bexists m res' x
