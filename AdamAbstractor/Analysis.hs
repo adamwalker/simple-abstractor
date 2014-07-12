@@ -41,7 +41,9 @@ disjoint :: (Eq a) => [a] -> Bool
 disjoint (hd:rst) = notElem hd rst && disjoint rst
 disjoint []       = True
 
---the abstractor
+fromRight (Right x) = x
+
+--Variable types
 data VarInfo = VarInfo {
     name    :: String,
     typ     :: VarAbsType,
@@ -54,6 +56,7 @@ type ValType = Either VarInfo Int
 type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
 type TheVarType  = (TheVarType', Maybe String)
 
+--Result of compiling a value expression
 newtype P v c f a = P {unP :: AST v c (Either (Leaf f TheVarType) a)} deriving (Functor)
 
 instance Applicative (P v c f) where
@@ -63,12 +66,30 @@ instance Applicative (P v c f) where
 toAST :: P v c f (Leaf f TheVarType) -> AST v c (Leaf f TheVarType)
 toAST (P ast) = fmap (either id id) ast
 
-fromRight (Right x) = x
+--conversion to AST
+binExprToAST :: BinExpr (ASTEqPred ValType) -> AST v c (Leaf f TheVarType)
+binExprToAST TrueE                              = T
+binExprToAST FalseE                             = F
+binExprToAST (AST.Not x)                        = Backend.Not $ binExprToAST x
+binExprToAST (Bin op x y)                       = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
+    where
+    absBOpToTSLBOp AST.And = Backend.And
+    absBOpToTSLBOp AST.Or  = Backend.Or
+    absBOpToTSLBOp AST.Imp = Backend.Imp
+binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = toAST $ makePred <$> valExprToAST x <*> valExprToAST y
+binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ toAST $ makePred <$> valExprToAST x <*> valExprToAST y
 
+valExprToAST :: ValExpr (ASTEqPred ValType) ValType -> P v c f ValType
+valExprToAST (Lit l)       = P $ Leaf (Right l)
+valExprToAST (CaseV cases) = P $ Case $ zip conds recs
+    where
+    conds = map (fmap Left . binExprToAST . fst) cases
+    recs  = map (unP . valExprToAST . snd)       cases
+
+--Create equality condition on two ValTypes
 varEqOne2 :: TheVarType -> Leaf f TheVarType
 varEqOne2 x = Backend.EqConst (Right x) 1
 
---conversion to AST
 makePred :: ValType -> ValType -> Leaf f TheVarType
 makePred x y = fromRight $ makePred' x y
     where
@@ -106,31 +127,8 @@ makePred x y = fromRight $ makePred' x y
               (Right y) 
               = Right $ ConstLeaf $ if' (x==y) True False
 
-absBOpToTSLBOp AST.And = Backend.And
-absBOpToTSLBOp AST.Or  = Backend.Or
-absBOpToTSLBOp AST.Imp = Backend.Imp
-
-binExprToAST :: BinExpr (ASTEqPred ValType) -> AST v c (Leaf f TheVarType)
-binExprToAST TrueE                              = T
-binExprToAST FalseE                             = F
-binExprToAST (AST.Not x)                        = Backend.Not $ binExprToAST x
-binExprToAST (Bin op x y)                       = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
-binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = handleValPred x y
-binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ handleValPred x y
-
-valExprToAST :: ValExpr (ASTEqPred ValType) ValType -> P v c f ValType
-valExprToAST (Lit l)       = P $ Leaf (Right l)
-valExprToAST (CaseV cases) = P $ Case $ zip conds recs
-    where
-    conds = map (fmap Left . binExprToAST . fst) cases
-    recs  = map (unP . valExprToAST . snd)       cases
-
-handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
-handleValPred x y = toAST $ makePred <$> valExprToAST x <*> valExprToAST y
-
---must at least always have an outgoing
-handleValPred2 :: f -> P v c f ValType -> Maybe (Int, Int) -> P v c f ValType -> Maybe (Int, Int) -> AST v c (Leaf f TheVarType)
-handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ toAST $ makePred <$> (sliceValType sx <$> x) <*> (sliceValType sy <$> y)
+xnorWith :: f -> AST v c (Leaf f TheVarType) -> AST v c (Leaf f TheVarType)
+xnorWith f x = XNor (eqConst (Left f) 1) x
 
 equalityConst :: f -> P v c f ValType -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
 equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> x 
@@ -139,14 +137,6 @@ equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> x
     --TODO: slice ignored for unabstracted variables
     func const (Left (VarInfo x NonAbs sz sect slice)) = Backend.EqConst (Right (eSectVar sect x sz)) const
     func const (Right const2)                          = ConstLeaf $ if' (const == const2) True False
-
-sliceValType :: Maybe(Int, Int) -> ValType -> ValType 
-sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
-sliceValType slice (Right int)    = Right (getBits slice int)
-
-sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
-sliceVarInfo Nothing        varInfo = varInfo 
-sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
 --TODO: slice ignored for unabstracted vars
 passValTSL :: P v c f ValType -> f -> AST v c (Leaf f TheVarType)
@@ -207,7 +197,8 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
             g (x, y) z  = (x, (z, y))
         abs2 lv s1 rv s2
             | fst lres == fst rres  = abs2Ret (snd lres) lv s1 rv s2 
-            | otherwise             = \f -> handleValPred2 f lASTRet s1 rASTRet s2
+            --must at least always have an outgoing
+            | otherwise             = \f -> xnorWith f $ toAST $ makePred <$> (sliceValType s1 <$> lASTRet) <*> (sliceValType s2 <$> rASTRet)
             where
             getRet var      = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
             lres            = getRet lv 
@@ -230,4 +221,13 @@ restrict (Just (x1, x2)) (Just (y1, y2)) = Just (y1 + x1, y1 + x2)
 getBits :: Slice -> Int -> Int
 getBits Nothing x       = x
 getBits (Just (l, u)) x = (shift (-l) x) .&. (2 ^ (u - l + 1) - 1)
+
+--Slice variables
+sliceValType :: Maybe (Int, Int) -> ValType -> ValType 
+sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
+sliceValType slice (Right int)    = Right (getBits slice int)
+
+sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
+sliceVarInfo Nothing        varInfo = varInfo 
+sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
