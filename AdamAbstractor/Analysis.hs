@@ -1,4 +1,4 @@
-{-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction #-}
+{-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction, DeriveFunctor #-}
 module AdamAbstractor.Analysis (
     VarInfo(..),
     Return(..),
@@ -41,7 +41,6 @@ disjoint (hd:rst) = notElem hd rst && disjoint rst
 disjoint []       = True
 
 --the abstractor
-
 data VarInfo = VarInfo {
     name    :: String,
     typ     :: VarAbsType,
@@ -53,6 +52,15 @@ type ValType = Either VarInfo Int
 
 type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
 type TheVarType  = (TheVarType', Maybe String)
+
+newtype P v c f a = P {unP :: AST v c (Either (Leaf f TheVarType) a)} deriving (Functor)
+
+instance Applicative (P v c f) where
+    pure            = P . pure . pure
+    (P x) <*> (P y) = P $ liftA2 (<*>) x y
+
+toAST :: P v c f (Leaf f TheVarType) -> AST v c (Leaf f TheVarType)
+toAST (P ast) = fmap (either id id) ast
 
 fromRight (Right x) = x
 
@@ -97,9 +105,6 @@ makePred x y = fromRight $ makePred' x y
               (Right y) 
               = Right $ ConstLeaf $ if' (x==y) True False
 
-(<**>) = liftA2 (<*>)
-(<$$>) = fmap . fmap
-
 absBOpToTSLBOp AST.And = Backend.And
 absBOpToTSLBOp AST.Or  = Backend.Or
 absBOpToTSLBOp AST.Imp = Backend.Imp
@@ -112,22 +117,22 @@ binExprToAST (Bin op x y)           = absBOpToTSLBOp op (binExprToAST x) (binExp
 binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = handleValPred x y
 binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ handleValPred x y
 
-valExprToAST :: ValExpr (ASTEqPred ValType) ValType -> AST v c (Either (Leaf f TheVarType) ValType)
-valExprToAST (Lit l)       = Leaf (Right l)
-valExprToAST (CaseV cases) = Case $ zip conds recs
+valExprToAST :: ValExpr (ASTEqPred ValType) ValType -> P v c f ValType
+valExprToAST (Lit l)       = P $ Leaf (Right l)
+valExprToAST (CaseV cases) = P $ Case $ zip conds recs
     where
     conds = map (fmap Left . binExprToAST . fst) cases
-    recs  = map (valExprToAST . snd)             cases
+    recs  = map (unP . valExprToAST . snd)             cases
 
 handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
-handleValPred x y = fmap (either id id) $ makePred <$$> valExprToAST x <**> valExprToAST y
+handleValPred x y = toAST $ makePred <$> valExprToAST x <*> valExprToAST y
 
 --must at least always have an outgoing
 handleValPred2 :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Leaf f TheVarType)
-handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ fmap (either id id) $ makePred <$$> (sliceValType sx <$$> x) <**> (sliceValType sy <$$> y)
+handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ toAST $ makePred <$> (sliceValType sx <$> P x) <*> (sliceValType sy <$> P y)
 
 equalityConst :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
-equalityConst f x sx y = XNor (eqConst (Left f) 1) $ fmap (either id id) $ func y <$$> x 
+equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> P x 
     where
     func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne2 $ eSectConstPred sect x (restrict sx slice) const
     --TODO: slice ignored for unabstracted variables
@@ -144,7 +149,7 @@ sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict 
 
 --TODO: slice ignored for unabstracted vars
 passValTSL3 :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
-passValTSL3 valE vars = fmap (either id id) $ f <$$> valE
+passValTSL3 valE vars = toAST $ f <$> P valE
     where
     f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL3"
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
@@ -163,7 +168,7 @@ abstract (AST.Assign var valExp) = return $ Return [var] abs2 astRet
         | var == lv && var == rv = error "abs2 on assignment"
         | otherwise              = error $ "Invariant broken: " ++ lv ++ " and " ++ rv ++ " are not assigned here"
     astRet varr 
-        | var == varr = valExprToAST valExp
+        | var == varr = unP $ valExprToAST valExp
         | otherwise   = error "invariant broken: astRet"
 abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
     where
