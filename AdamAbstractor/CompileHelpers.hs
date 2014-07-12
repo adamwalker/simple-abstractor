@@ -43,6 +43,6 @@ compileUpdate ce m = func <$> abstract ce <*> abstract ce
                 lift $ traceST $ show $ prettyPrint $ equalityConst (text $ pack "next") (astRet dbg v) s c
                 compile m ops $ equalityConst x (astRet ret v) s c
             pred (Enum var)                           x = do
-                lift $ traceST $ show $ prettyPrint $ passValTSL3 (astRet dbg var) (text $ pack "next")
-                compile m ops $ passValTSL3 (astRet ret var) x
+                lift $ traceST $ show $ prettyPrint $ passValTSL (astRet dbg var) (text $ pack "next")
+                compile m ops $ passValTSL (astRet ret var) x
 

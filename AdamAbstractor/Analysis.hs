@@ -8,7 +8,7 @@ module AdamAbstractor.Analysis (
     TheVarType',
     ValType,
     getBits,
-    passValTSL3,
+    passValTSL,
     equalityConst
     ) where
 
@@ -148,8 +148,8 @@ sliceVarInfo Nothing        varInfo = varInfo
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
 --TODO: slice ignored for unabstracted vars
-passValTSL3 :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
-passValTSL3 valE vars = toAST $ f <$> P valE
+passValTSL :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
+passValTSL valE vars = toAST $ f <$> P valE
     where
     f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL3"
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
