@@ -110,10 +110,10 @@ absBOpToTSLBOp AST.Or  = Backend.Or
 absBOpToTSLBOp AST.Imp = Backend.Imp
 
 binExprToAST :: BinExpr (ASTEqPred ValType) -> AST v c (Leaf f TheVarType)
-binExprToAST TrueE                  = T
-binExprToAST FalseE                 = F
-binExprToAST (AST.Not x)            = Backend.Not $ binExprToAST x
-binExprToAST (Bin op x y)           = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
+binExprToAST TrueE                              = T
+binExprToAST FalseE                             = F
+binExprToAST (AST.Not x)                        = Backend.Not $ binExprToAST x
+binExprToAST (Bin op x y)                       = absBOpToTSLBOp op (binExprToAST x) (binExprToAST y)
 binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = handleValPred x y
 binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ handleValPred x y
 
