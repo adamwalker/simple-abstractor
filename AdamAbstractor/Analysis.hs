@@ -43,6 +43,13 @@ disjoint []       = True
 
 fromRight (Right x) = x
 
+--AST utility functions
+varEqOne :: TheVarType -> Leaf f TheVarType
+varEqOne x = Backend.EqConst (Right x) 1
+
+xnorWith :: f -> AST v c (Leaf f TheVarType) -> AST v c (Leaf f TheVarType)
+xnorWith f x = XNor (eqConst (Left f) 1) x
+
 --Variable types
 data VarInfo = VarInfo {
     name    :: String,
@@ -55,6 +62,28 @@ type ValType = Either VarInfo Int
 
 type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
 type TheVarType  = (TheVarType', Maybe String)
+
+--Slicing
+--The second slice gets sliced by the first slice
+restrict :: Slice -> Slice -> Slice
+restrict Nothing          Nothing        = Nothing
+restrict Nothing          (Just sl)      = Just sl
+restrict (Just sl)        Nothing        = Just sl
+restrict (Just (x1, x2)) (Just (y1, y2)) = Just (y1 + x1, y1 + x2)
+
+--Slice an integer
+getBits :: Slice -> Int -> Int
+getBits Nothing x       = x
+getBits (Just (l, u)) x = (shift (-l) x) .&. (2 ^ (u - l + 1) - 1)
+
+--Slice variables
+sliceValType :: Maybe (Int, Int) -> ValType -> ValType 
+sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
+sliceValType slice (Right int)    = Right (getBits slice int)
+
+sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
+sliceVarInfo Nothing        varInfo = varInfo 
+sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
 --Result of compiling a value expression
 newtype P v c f a = P {unP :: AST v c (Either (Leaf f TheVarType) a)} deriving (Functor)
@@ -87,9 +116,6 @@ valExprToAST (CaseV cases) = P $ Case $ zip conds recs
     recs  = map (unP . valExprToAST . snd)       cases
 
 --Create equality condition on two ValTypes
-varEqOne :: TheVarType -> Leaf f TheVarType
-varEqOne x = Backend.EqConst (Right x) 1
-
 makePred :: ValType -> ValType -> Leaf f TheVarType
 makePred x y = fromRight $ makePred' x y
     where
@@ -126,9 +152,6 @@ makePred x y = fromRight $ makePred' x y
     makePred' (Right x) 
               (Right y) 
               = Right $ ConstLeaf $ if' (x==y) True False
-
-xnorWith :: f -> AST v c (Leaf f TheVarType) -> AST v c (Leaf f TheVarType)
-xnorWith f x = XNor (eqConst (Left f) 1) x
 
 equalityConst :: f -> P v c f ValType -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
 equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> x 
@@ -179,7 +202,6 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
                 where
                 conds = map (fmap Left . binExprToAST . fst) cases
                 recs  = map (unP . ($ var) . astRet)               subcases
-
 abstract (AST.Conj es) = join $ res <$> sequenceA rres
     where
     rres     = map abstract es
@@ -208,26 +230,4 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
         astR var
             | var `elem` allVars = astRet (snd $ fromJustNote "varsAssigned Conj" $ Map.lookup var theMap) var
             | otherwise          = error $ "Invariant broken: " ++ var ++ " is not assigned in CONJ"
-
---Slice a slice
---The second slice gets sliced by the first slice
-restrict :: Slice -> Slice -> Slice
-restrict Nothing          Nothing        = Nothing
-restrict Nothing          (Just sl)      = Just sl
-restrict (Just sl)        Nothing        = Just sl
-restrict (Just (x1, x2)) (Just (y1, y2)) = Just (y1 + x1, y1 + x2)
-
---Slice an integer
-getBits :: Slice -> Int -> Int
-getBits Nothing x       = x
-getBits (Just (l, u)) x = (shift (-l) x) .&. (2 ^ (u - l + 1) - 1)
-
---Slice variables
-sliceValType :: Maybe (Int, Int) -> ValType -> ValType 
-sliceValType slice (Left varInfo) = Left $ sliceVarInfo slice varInfo
-sliceValType slice (Right int)    = Right (getBits slice int)
-
-sliceVarInfo :: Maybe (Int, Int) -> VarInfo -> VarInfo
-sliceVarInfo Nothing        varInfo = varInfo 
-sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
