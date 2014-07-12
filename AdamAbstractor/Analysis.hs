@@ -87,15 +87,15 @@ valExprToAST (CaseV cases) = P $ Case $ zip conds recs
     recs  = map (unP . valExprToAST . snd)       cases
 
 --Create equality condition on two ValTypes
-varEqOne2 :: TheVarType -> Leaf f TheVarType
-varEqOne2 x = Backend.EqConst (Right x) 1
+varEqOne :: TheVarType -> Leaf f TheVarType
+varEqOne x = Backend.EqConst (Right x) 1
 
 makePred :: ValType -> ValType -> Leaf f TheVarType
 makePred x y = fromRight $ makePred' x y
     where
     makePred' (Left (VarInfo x Abs sz sect slice))
               (Right y) 
-              = Right $ varEqOne2 $ eSectConstPred sect x slice y 
+              = Right $ varEqOne $ eSectConstPred sect x slice y 
 
     --TODO: slice ignored for unabstracted variables
     makePred' (Left (VarInfo x NonAbs sz sect slice)) 
@@ -104,7 +104,7 @@ makePred x y = fromRight $ makePred' x y
 
     makePred' (Right y) 
               (Left (VarInfo x Abs sz sect slice))
-              = Right $ varEqOne2 $ eSectConstPred sect x slice y 
+              = Right $ varEqOne $ eSectConstPred sect x slice y 
 
     --TODO: slice ignored for unabstracted variables
     makePred' (Right y) 
@@ -113,7 +113,7 @@ makePred x y = fromRight $ makePred' x y
 
     makePred' (Left (VarInfo x Abs sz1 sect1 slice1)) 
               (Left (VarInfo y Abs sz2 sect2 slice2)) 
-              = Right $ varEqOne2 $ eSectVarPred sect1 sect2 x slice1 y slice2
+              = Right $ varEqOne $ eSectVarPred sect1 sect2 x slice1 y slice2
 
     makePred' (Left (VarInfo x NonAbs sz1 sect1 slice1)) 
               (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
@@ -133,7 +133,7 @@ xnorWith f x = XNor (eqConst (Left f) 1) x
 equalityConst :: f -> P v c f ValType -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
 equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> x 
     where
-    func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne2 $ eSectConstPred sect x (restrict sx slice) const
+    func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne $ eSectConstPred sect x (restrict sx slice) const
     --TODO: slice ignored for unabstracted variables
     func const (Left (VarInfo x NonAbs sz sect slice)) = Backend.EqConst (Right (eSectVar sect x sz)) const
     func const (Right const2)                          = ConstLeaf $ if' (const == const2) True False
