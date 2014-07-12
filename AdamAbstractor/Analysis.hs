@@ -1,5 +1,6 @@
 {-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction, DeriveFunctor #-}
 module AdamAbstractor.Analysis (
+    P(..),
     VarInfo(..),
     Return(..),
     abstract,
@@ -122,17 +123,17 @@ valExprToAST (Lit l)       = P $ Leaf (Right l)
 valExprToAST (CaseV cases) = P $ Case $ zip conds recs
     where
     conds = map (fmap Left . binExprToAST . fst) cases
-    recs  = map (unP . valExprToAST . snd)             cases
+    recs  = map (unP . valExprToAST . snd)       cases
 
 handleValPred :: ValExpr (ASTEqPred ValType) ValType -> ValExpr (ASTEqPred ValType) ValType -> AST v c (Leaf f TheVarType)
 handleValPred x y = toAST $ makePred <$> valExprToAST x <*> valExprToAST y
 
 --must at least always have an outgoing
-handleValPred2 :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> AST v c (Leaf f TheVarType)
-handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ toAST $ makePred <$> (sliceValType sx <$> P x) <*> (sliceValType sy <$> P y)
+handleValPred2 :: f -> P v c f ValType -> Maybe (Int, Int) -> P v c f ValType -> Maybe (Int, Int) -> AST v c (Leaf f TheVarType)
+handleValPred2 f x sx y sy = XNor (eqConst (Left f) 1) $ toAST $ makePred <$> (sliceValType sx <$> x) <*> (sliceValType sy <$> y)
 
-equalityConst :: f -> AST v c (Either (Leaf f TheVarType) ValType) -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
-equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> P x 
+equalityConst :: f -> P v c f ValType -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
+equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> x 
     where
     func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne2 $ eSectConstPred sect x (restrict sx slice) const
     --TODO: slice ignored for unabstracted variables
@@ -148,8 +149,8 @@ sliceVarInfo Nothing        varInfo = varInfo
 sliceVarInfo s@(Just(l, u)) varInfo = varInfo {sz = u - l + 1, slice = restrict s (slice varInfo)}
 
 --TODO: slice ignored for unabstracted vars
-passValTSL :: AST v c (Either (Leaf f TheVarType) ValType) -> f -> AST v c (Leaf f TheVarType)
-passValTSL valE vars = toAST $ f <$> P valE
+passValTSL :: P v c f ValType -> f -> AST v c (Leaf f TheVarType)
+passValTSL valE vars = toAST $ f <$> valE
     where
     f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL3"
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
@@ -158,7 +159,7 @@ passValTSL valE vars = toAST $ f <$> P valE
 data Return f v c = Return {
     varsRet :: [String],
     abs2Ret :: String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> f -> AST v c (Leaf f TheVarType),
-    astRet  :: String -> AST v c (Either (Leaf f TheVarType) ValType)
+    astRet  :: String -> P v c f ValType
 }
 
 abstract :: CtrlExpr String (ASTEqPred ValType) ValType -> Either String (Return f v c)
@@ -168,7 +169,7 @@ abstract (AST.Assign var valExp) = return $ Return [var] abs2 astRet
         | var == lv && var == rv = error "abs2 on assignment"
         | otherwise              = error $ "Invariant broken: " ++ lv ++ " and " ++ rv ++ " are not assigned here"
     astRet varr 
-        | var == varr = unP $ valExprToAST valExp
+        | var == varr = valExprToAST valExp
         | otherwise   = error "invariant broken: astRet"
 abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
     where
@@ -183,11 +184,11 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
             rec   = map (\f -> f lv s1 rv s2) caseabs2s
             tsl v = Backend.Case $ zip conds (map (($ v)) rec)
         astR var 
-            | var `elem` hd = Backend.Case $ zip conds recs
+            | var `elem` hd = P $ Backend.Case $ zip conds recs
             | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned in case"
                 where
                 conds = map (fmap Left . binExprToAST . fst) cases
-                recs  = map (($ var) . astRet)               subcases
+                recs  = map (unP . ($ var) . astRet)               subcases
 
 abstract (AST.Conj es) = join $ res <$> sequenceA rres
     where
