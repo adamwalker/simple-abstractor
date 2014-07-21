@@ -3,13 +3,13 @@
 
 name:                adamabstractor
 version:             0.1.0.0
-synopsis:            Simple abstractor for termite project
+synopsis:            Simple abstractor for Termite project
 -- description:         
 license:             BSD3
 license-file:        LICENSE
 author:              Adam Walker
 maintainer:          adamwalker10@gmail.com
--- copyright:           
+copyright:           2014 Adam Walker
 -- category:            
 build-type:          Simple
 -- extra-source-files:  
