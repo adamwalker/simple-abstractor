@@ -1,4 +1,4 @@
-{-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction, DeriveFunctor #-}
+{-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction, DeriveFunctor, ScopedTypeVariables #-}
 module AdamAbstractor.Analysis (
     P(..),
     VarInfo(..),
@@ -92,6 +92,14 @@ instance Applicative (P v c f) where
     pure            = P . pure . pure
     (P x) <*> (P y) = P $ liftA2 (<*>) x y
 
+instance Monad (P v c f) where
+    return      = pure
+    (P x) >>= f = P $ do
+        x <- x
+        case x of
+            Left l  -> return $ Left l
+            Right r -> unP $ f r
+
 toAST :: P v c f (Leaf f TheVarType) -> AST v c (Leaf f TheVarType)
 toAST (P ast) = fmap (either id id) ast
 
@@ -105,8 +113,8 @@ binExprToAST (Bin op x y)                       = absBOpToTSLBOp op (binExprToAS
     absBOpToTSLBOp AST.And = Backend.And
     absBOpToTSLBOp AST.Or  = Backend.Or
     absBOpToTSLBOp AST.Imp = Backend.Imp
-binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = toAST $ makePred <$> valExprToAST x <*> valExprToAST y
-binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ toAST $ makePred <$> valExprToAST x <*> valExprToAST y
+binExprToAST (AST.Pred (ASTEqPred AST.Eq x y))  = toAST $ join $ makePred <$> valExprToAST x <*> valExprToAST y
+binExprToAST (AST.Pred (ASTEqPred AST.Neq x y)) = Backend.Not $ toAST $ join $ makePred <$> valExprToAST x <*> valExprToAST y
 
 valExprToAST :: ValExpr (ASTEqPred ValType) ValType -> P v c f ValType
 valExprToAST (Lit l)       = P $ Leaf (Right l)
@@ -116,34 +124,34 @@ valExprToAST (CaseV cases) = P $ Case $ zip conds recs
     recs  = map (unP . valExprToAST . snd)       cases
 
 --Create equality condition on two ValTypes
-makePred :: ValType -> ValType -> Leaf f TheVarType
+makePred :: ValType -> ValType -> P v c f (Leaf f TheVarType)
 makePred x y = fromRight $ makePred' x y
     where
     makePred' (Left (VarInfo x Abs sz sect slice))
               (Right y) 
-              = Right $ varEqOne $ eSectConstPred sect x slice y 
+              = Right $ return $ varEqOne $ eSectConstPred sect x slice y 
 
     --TODO: slice ignored for unabstracted variables
     makePred' (Left (VarInfo x NonAbs sz sect slice)) 
               (Right y) 
-              = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
+              = Right $ return $ Backend.EqConst (Right (eSectVar sect x sz)) y
 
     makePred' (Right y) 
               (Left (VarInfo x Abs sz sect slice))
-              = Right $ varEqOne $ eSectConstPred sect x slice y 
+              = Right $ return $ varEqOne $ eSectConstPred sect x slice y 
 
     --TODO: slice ignored for unabstracted variables
     makePred' (Right y) 
               (Left (VarInfo x NonAbs sz sect slice))  
-              = Right $ Backend.EqConst (Right (eSectVar sect x sz)) y
+              = Right $ return $ Backend.EqConst (Right (eSectVar sect x sz)) y
 
     makePred' (Left (VarInfo x Abs sz1 sect1 slice1)) 
               (Left (VarInfo y Abs sz2 sect2 slice2)) 
-              = Right $ varEqOne $ eSectVarPred sect1 sect2 x slice1 y slice2
+              = Right $ return $ varEqOne $ eSectVarPred sect1 sect2 x slice1 y slice2
 
     makePred' (Left (VarInfo x NonAbs sz1 sect1 slice1)) 
               (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
-              = Right $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
+              = Right $ return $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
 
     makePred' (Left _)  
               (Left _)  
@@ -151,21 +159,21 @@ makePred x y = fromRight $ makePred' x y
 
     makePred' (Right x) 
               (Right y) 
-              = Right $ ConstLeaf $ if' (x==y) True False
+              = Right $ P $ if' (x==y) T F
 
 equalityConst :: f -> P v c f ValType -> Maybe (Int, Int) -> Int -> AST v c (Leaf f TheVarType)
-equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func y <$> x 
+equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func =<< x 
     where
-    func const (Left (VarInfo x Abs    sz sect slice)) = varEqOne $ eSectConstPred sect x (restrict sx slice) const
+    func (Left (VarInfo x Abs    sz sect slice)) = return $ varEqOne $ eSectConstPred sect x (restrict sx slice) y
     --TODO: slice ignored for unabstracted variables
-    func const (Left (VarInfo x NonAbs sz sect slice)) = Backend.EqConst (Right (eSectVar sect x sz)) const
-    func const (Right const2)                          = ConstLeaf $ if' (const == const2) True False
+    func (Left (VarInfo x NonAbs sz sect slice)) = return $ Backend.EqConst (Right (eSectVar sect x sz)) y
+    func (Right const2)                          = P $ if' (y == const2) T F
 
 --TODO: slice ignored for unabstracted vars
 passValTSL :: P v c f ValType -> f -> AST v c (Leaf f TheVarType)
 passValTSL valE vars = toAST $ f <$> valE
     where
-    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL3"
+    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL: abstracted variable"
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
     f (Right const)                                 = Backend.EqConst (Left vars) const
         
@@ -220,7 +228,7 @@ abstract (AST.Conj es) = join $ res <$> sequenceA rres
         abs2 lv s1 rv s2
             | fst lres == fst rres  = abs2Ret (snd lres) lv s1 rv s2 
             --must at least always have an outgoing
-            | otherwise             = \f -> xnorWith f $ toAST $ makePred <$> (sliceValType s1 <$> lASTRet) <*> (sliceValType s2 <$> rASTRet)
+            | otherwise             = \f -> xnorWith f $ toAST $ join $ makePred <$> (sliceValType s1 <$> lASTRet) <*> (sliceValType s2 <$> rASTRet)
             where
             getRet var      = fromJustNote ("getIdent: " ++ var) $ Map.lookup var theMap
             lres            = getRet lv 
