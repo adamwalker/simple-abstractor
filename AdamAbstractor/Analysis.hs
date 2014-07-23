@@ -203,7 +203,7 @@ abstract (AST.CaseC cases)  = join $ res <$> sequenceA subcases
         abs2 lv s1 rv s2 = tsl 
             where
             rec   = map (\f -> f lv s1 rv s2) caseabs2s
-            tsl v = Backend.Case $ zip conds (map (($ v)) rec)
+            tsl v = Backend.Case $ zip conds (map ($ v) rec)
         astR var 
             | var `elem` hd = P $ Backend.Case $ zip conds recs
             | otherwise     = error $ "Invariant broken: " ++ var ++ " is not assigned in case"

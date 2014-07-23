@@ -60,7 +60,7 @@ bind f (Disj xs)     = Disj $ map (bind f) xs
 bind f (Case cases)  = Case $ fmap (bimap (bind f) (bind f)) cases
 bind f (Exists func) = Exists $ \v -> bind f (func v)
 bind f (QuantLit x)  = QuantLit x
-bind f (Let x func)  = Let (bind f x) (\c -> bind f (func c))
+bind f (Let x func)  = Let (bind f x) (bind f . func)
 bind f (LetLit x)    = LetLit x
 bind f (Leaf x)      = f x
 
