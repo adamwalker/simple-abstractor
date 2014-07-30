@@ -42,6 +42,7 @@ disjoint (hd:rst) = notElem hd rst && disjoint rst
 disjoint []       = True
 
 fromRight (Right x) = x
+fromRight (Left  x) = error x
 
 --AST utility functions
 varEqOne :: TheVarType -> Leaf f TheVarType
@@ -151,11 +152,11 @@ makePred x y = fromRight $ makePred' x y
 
     makePred' (Left (VarInfo x NonAbs sz1 sect1 slice1)) 
               (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
-              = Right $ return $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2 )
+              = Right $ return $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2)
 
-    makePred' (Left _)  
-              (Left _)  
-              = Left "handleValPred: Attempted to compare pred var and non-pred var"
+    makePred' (Left v1)  
+              (Left v2)  
+              = Left $ "handleValPred: Attempted to compare pred var and non-pred var: " ++ show (name v1) ++ " : " ++ show (name v2)
 
     makePred' (Right x) 
               (Right y) 
@@ -173,7 +174,7 @@ equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func =<< x
 passValTSL :: P v c f ValType -> f -> AST v c (Leaf f TheVarType)
 passValTSL valE vars = toAST $ f <$> valE
     where
-    f (Left (VarInfo name Abs    sz section slice)) = error "passValTSL: abstracted variable"
+    f (Left (VarInfo name Abs    sz section slice)) = error $ "passValTSL: abstracted variable: " ++ name
     f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
     f (Right const)                                 = Backend.EqConst (Left vars) const
         
