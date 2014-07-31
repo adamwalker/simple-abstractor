@@ -21,12 +21,13 @@ import Data.Traversable hiding (mapM)
 import Control.Applicative
 import Data.Bifunctor
 
-import Data.Text.Lazy hiding (intercalate, map, take, length)
+import Data.Text.Lazy hiding (intercalate, map, take, length, drop)
 import Text.PrettyPrint.Leijen.Text
 
 import Util
 import Cudd.Imperative
 import Synthesis.Interface
+import Data.Tuple.All
 
 -- v   == type of single bit variables bound by exists statements 
 -- c   == type of single bit variables bound by let statements
@@ -150,8 +151,14 @@ ccase m x = do
         --alive == accum', neg'
         go accum' neg' cs
 
-compile :: STDdManager s u -> VarOps pdb v s u -> AST  (DDNode s u) (DDNode s u) (Leaf [DDNode s u] (v, Maybe String)) -> StateT pdb (ST s) (DDNode s u)
-compile m VarOps{..} = compile' where
+getVar' :: VarOps pdb v s u -> v -> Maybe String -> Maybe (Int, Int) -> StateT pdb (ST s) [DDNode s u]
+getVar' VarOps{..} var group slice = do
+    res <- getVar var group
+    return $ (maybe id (uncurryN doSlice) slice) res
+    where doSlice x y = take (y - x + 1) . drop x
+
+compile :: STDdManager s u -> VarOps pdb v s u -> AST  (DDNode s u) (DDNode s u) (Leaf [DDNode s u] (v, Maybe String, Maybe (Int, Int))) -> StateT pdb (ST s) (DDNode s u)
+compile m vo@VarOps{..} = compile' where
     binOp func m x y = do
         x <- compile' x
         y <- compile' y
@@ -188,11 +195,11 @@ compile m VarOps{..} = compile' where
             y <- compile' y
             return (x, y)
     compile' (Leaf (EqVar x y))   = do
-        x <- either return (uncurry getVar) x
-        y <- uncurry getVar y
+        x <- either return (uncurryN (getVar' vo)) x
+        y <- uncurryN (getVar' vo) y
         lift $ xeqy m x y
     compile' (Leaf (EqConst x c)) = do
-        x <- either return (uncurry getVar) x
+        x <- either return (uncurryN (getVar' vo)) x
         lift $ computeCube m x $ bitsToBoolArrBe (length x) c
     compile' (Exists f)    = withTmp $ \x -> do
         res' <- compile' $ f x

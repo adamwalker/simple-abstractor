@@ -31,27 +31,27 @@ data VarType p = Enum String | Pred p
 data Section = StateSection | LabelSection | OutcomeSection
     deriving (Show, Eq, Ord)
 
-eSectVarPred :: Section -> Section -> String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> (BAVar (VarType EqPred) (VarType LabEqPred), Maybe String)
-eSectVarPred StateSection   StateSection   x s1 y s2 = (StateVar (Pred pred) 1, Nothing) where pred = constructVarPred x s1 y s2
-eSectVarPred LabelSection   StateSection   x s1 y s2 = (LabelVar (Pred pred) 1, Nothing) where pred = constructLabPred x s1 y s2 False
-eSectVarPred StateSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, Nothing) where pred = constructLabPred y s2 x s1 False
-eSectVarPred OutcomeSection StateSection   x s1 y s2 = (OutVar (Pred pred) 1,   Nothing) where pred = constructLabPred x s1 y s2 True
-eSectVarPred StateSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1,   Nothing) where pred = constructLabPred x s1 y s2 True
-eSectVarPred LabelSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1,   Nothing) where pred = constructLabPred x s1 y s2 True
-eSectVarPred OutcomeSection LabelSection   x s1 y s2 = (OutVar (Pred pred) 1,   Nothing) where pred = constructLabPred x s1 y s2 True
-eSectVarPred LabelSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, Nothing) where pred = constructLabPred x s1 y s2 True
-eSectVarPred OutcomeSection OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1,   Nothing) where pred = constructLabPred x s1 y s2 True
+eSectVarPred :: Section -> Section -> String -> Maybe (Int, Int) -> String -> Maybe (Int, Int) -> (BAVar (VarType EqPred) (VarType LabEqPred), Maybe String, Maybe (Int, Int))
+eSectVarPred StateSection   StateSection   x s1 y s2 = (StateVar (Pred pred) 1, Nothing, Nothing) where pred = constructVarPred x s1 y s2
+eSectVarPred LabelSection   StateSection   x s1 y s2 = (LabelVar (Pred pred) 1, Nothing, Nothing) where pred = constructLabPred x s1 y s2 False
+eSectVarPred StateSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, Nothing, Nothing) where pred = constructLabPred y s2 x s1 False
+eSectVarPred OutcomeSection StateSection   x s1 y s2 = (OutVar (Pred pred) 1,   Nothing, Nothing) where pred = constructLabPred x s1 y s2 True
+eSectVarPred StateSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1,   Nothing, Nothing) where pred = constructLabPred x s1 y s2 True
+eSectVarPred LabelSection   OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1,   Nothing, Nothing) where pred = constructLabPred x s1 y s2 True
+eSectVarPred OutcomeSection LabelSection   x s1 y s2 = (OutVar (Pred pred) 1,   Nothing, Nothing) where pred = constructLabPred x s1 y s2 True
+eSectVarPred LabelSection   LabelSection   x s1 y s2 = (LabelVar (Pred pred) 1, Nothing, Nothing) where pred = constructLabPred x s1 y s2 True
+eSectVarPred OutcomeSection OutcomeSection x s1 y s2 = (OutVar (Pred pred) 1,   Nothing, Nothing) where pred = constructLabPred x s1 y s2 True
 eSectVarPred x              y              _ _  _ _  = error $ "effectiveSection: " ++ show x ++ " " ++ show y
 
-eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> (BAVar (VarType EqPred) (VarType LabEqPred), Maybe String)
-eSectConstPred StateSection   x s y = (StateVar (Pred pred) 1, Just x) where pred = constructConstPred x s y
-eSectConstPred LabelSection   x s y = (LabelVar (Pred pred) 1, Just x) where pred = constructConstLabPred x s y
-eSectConstPred OutcomeSection x s y = (OutVar   (Pred pred) 1, Just x) where pred = constructConstLabPred x s y
+eSectConstPred :: Section -> String -> Maybe (Int, Int) -> Int -> (BAVar (VarType EqPred) (VarType LabEqPred), Maybe String, Maybe (Int, Int))
+eSectConstPred StateSection   x s y = (StateVar (Pred pred) 1, Just x, Nothing) where pred = constructConstPred x s y
+eSectConstPred LabelSection   x s y = (LabelVar (Pred pred) 1, Just x, Nothing) where pred = constructConstLabPred x s y
+eSectConstPred OutcomeSection x s y = (OutVar   (Pred pred) 1, Just x, Nothing) where pred = constructConstLabPred x s y
 
-eSectVar :: Section -> String -> Int -> (BAVar (VarType EqPred) (VarType LabEqPred), Maybe String)
-eSectVar StateSection   n s = (StateVar (Enum n) s, Nothing)
-eSectVar LabelSection   n s = (LabelVar (Enum n) s, Nothing)
-eSectVar OutcomeSection n s = (OutVar   (Enum n) s, Nothing)
+eSectVar :: Section -> String -> Int -> Maybe (Int, Int) -> (BAVar (VarType EqPred) (VarType LabEqPred), Maybe String, Maybe (Int, Int))
+eSectVar StateSection   n s sl = (StateVar (Enum n) s, Nothing, sl)
+eSectVar LabelSection   n s sl = (LabelVar (Enum n) s, Nothing, sl)
+eSectVar OutcomeSection n s sl = (OutVar   (Enum n) s, Nothing, sl)
 
 --The variable declatarion section
 data VarAbsType where

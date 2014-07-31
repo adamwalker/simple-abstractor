@@ -62,7 +62,7 @@ data VarInfo = VarInfo {
 type ValType = Either VarInfo Int
 
 type TheVarType' = BAVar (VarType EqPred) (VarType LabEqPred)
-type TheVarType  = (TheVarType', Maybe String)
+type TheVarType  = (TheVarType', Maybe String, Slice)
 
 --Slicing
 --The second slice gets sliced by the first slice
@@ -132,19 +132,17 @@ makePred x y = fromRight $ makePred' x y
               (Right y) 
               = Right $ return $ varEqOne $ eSectConstPred sect x slice y 
 
-    --TODO: slice ignored for unabstracted variables
     makePred' (Left (VarInfo x NonAbs sz sect slice)) 
               (Right y) 
-              = Right $ return $ Backend.EqConst (Right (eSectVar sect x sz)) y
+              = Right $ return $ Backend.EqConst (Right (eSectVar sect x sz slice)) y
 
     makePred' (Right y) 
               (Left (VarInfo x Abs sz sect slice))
               = Right $ return $ varEqOne $ eSectConstPred sect x slice y 
 
-    --TODO: slice ignored for unabstracted variables
     makePred' (Right y) 
               (Left (VarInfo x NonAbs sz sect slice))  
-              = Right $ return $ Backend.EqConst (Right (eSectVar sect x sz)) y
+              = Right $ return $ Backend.EqConst (Right (eSectVar sect x sz slice)) y
 
     makePred' (Left (VarInfo x Abs sz1 sect1 slice1)) 
               (Left (VarInfo y Abs sz2 sect2 slice2)) 
@@ -152,7 +150,7 @@ makePred x y = fromRight $ makePred' x y
 
     makePred' (Left (VarInfo x NonAbs sz1 sect1 slice1)) 
               (Left (VarInfo y NonAbs sz2 sect2 slice2)) 
-              = Right $ return $ Backend.EqVar (Right (eSectVar sect1 x sz1)) (eSectVar sect2 y sz2)
+              = Right $ return $ Backend.EqVar (Right (eSectVar sect1 x sz1 slice1)) (eSectVar sect2 y sz2 slice2)
 
     makePred' (Left v1)  
               (Left v2)  
@@ -166,16 +164,14 @@ equalityConst :: f -> P v c f ValType -> Maybe (Int, Int) -> Int -> AST v c (Lea
 equalityConst f x sx y = XNor (eqConst (Left f) 1) $ toAST $ func =<< x 
     where
     func (Left (VarInfo x Abs    sz sect slice)) = return $ varEqOne $ eSectConstPred sect x (restrict sx slice) y
-    --TODO: slice ignored for unabstracted variables
-    func (Left (VarInfo x NonAbs sz sect slice)) = return $ Backend.EqConst (Right (eSectVar sect x sz)) y
+    func (Left (VarInfo x NonAbs sz sect slice)) = return $ Backend.EqConst (Right (eSectVar sect x sz slice)) y
     func (Right const2)                          = P $ if' (y == const2) T F
 
---TODO: slice ignored for unabstracted vars
 passValTSL :: P v c f ValType -> f -> AST v c (Leaf f TheVarType)
 passValTSL valE vars = toAST $ f <$> valE
     where
     f (Left (VarInfo name Abs    sz section slice)) = error $ "passValTSL: abstracted variable: " ++ name
-    f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz)
+    f (Left (VarInfo name NonAbs sz section slice)) = Backend.EqVar (Left vars) (eSectVar section name sz slice)
     f (Right const)                                 = Backend.EqConst (Left vars) const
         
 data Return f v c = Return {
