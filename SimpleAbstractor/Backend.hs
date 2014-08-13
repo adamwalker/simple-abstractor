@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, PolymorphicComponents, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
-module AdamAbstractor.Backend (
+module SimpleAbstractor.Backend (
     AST(..),
     Leaf(..),
     prettyPrint,

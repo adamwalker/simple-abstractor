@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, PolymorphicComponents, ScopedTypeVariables, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-module AdamAbstractor.TopLevel where
+module SimpleAbstractor.TopLevel where
 
 import Control.Applicative
 import Data.Foldable
@@ -11,8 +11,8 @@ import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as T
 import Text.Parsec.Language
 
-import AdamAbstractor.AST hiding (Pred)
-import AdamAbstractor.Predicate as Predicate
+import SimpleAbstractor.AST hiding (Pred)
+import SimpleAbstractor.Predicate as Predicate
 
 stdDef = emptyDef {T.identStart = letter <|> char '_'
                   ,T.identLetter = alphaNum <|> char '_'

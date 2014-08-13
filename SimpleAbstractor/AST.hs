@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-module AdamAbstractor.AST where
+module SimpleAbstractor.AST where
 
 import Data.Functor
 import Data.Foldable
@@ -9,7 +9,7 @@ import Data.Bitraversable as B
 import Data.Bifoldable as B
 import Control.Applicative
 
-import AdamAbstractor.Predicate hiding (EqPred)
+import SimpleAbstractor.Predicate hiding (EqPred)
 
 --Variable declaration section
 

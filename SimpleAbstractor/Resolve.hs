@@ -1,4 +1,4 @@
-module AdamAbstractor.Resolve (
+module SimpleAbstractor.Resolve (
     resolve,
     doDecls,
     SymTab
@@ -13,9 +13,9 @@ import Control.Monad as M
 import Data.EitherR
 import Control.Error.Util
 
-import AdamAbstractor.AST
-import AdamAbstractor.Analysis
-import AdamAbstractor.Predicate
+import SimpleAbstractor.AST
+import SimpleAbstractor.Analysis
+import SimpleAbstractor.Predicate
 
 type SymbolType = Either (VarAbsType, Section, Int) Int
 type SymTab     = Map String SymbolType

@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, PolymorphicComponents, ScopedTypeVariables #-}
-module AdamAbstractor.CompileHelpers where
+module SimpleAbstractor.CompileHelpers where
 
 import Control.Monad.ST
 import Control.Monad.ST.Unsafe
@@ -10,10 +10,10 @@ import Text.PrettyPrint.Leijen.Text (text)
 
 import Cudd.Imperative
 
-import AdamAbstractor.Analysis
-import AdamAbstractor.AST hiding (Pred)
-import AdamAbstractor.Backend as Backend
-import AdamAbstractor.Predicate as Predicate
+import SimpleAbstractor.Analysis
+import SimpleAbstractor.AST hiding (Pred)
+import SimpleAbstractor.Backend as Backend
+import SimpleAbstractor.Predicate as Predicate
 import Synthesis.Interface
 
 import Data.Text.Lazy as Text

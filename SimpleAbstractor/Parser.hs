@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module AdamAbstractor.Parser (
+module SimpleAbstractor.Parser (
     reservedNames,
     reservedOps,
     typeDecl,
@@ -16,8 +16,8 @@ import Text.Parsec.Expr
 import qualified Text.Parsec.Token as T
 import Text.Parsec.Language
 
-import AdamAbstractor.AST
-import AdamAbstractor.Predicate hiding (Pred)
+import SimpleAbstractor.AST
+import SimpleAbstractor.Predicate hiding (Pred)
 
 --The lexer
 reservedNames = ["case", "true", "false", "else", "abs", "conc", "uint", "bool"]

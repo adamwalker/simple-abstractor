@@ -1,5 +1,5 @@
 {-#LANGUAGE TupleSections, GADTs, RecordWildCards, NoMonomorphismRestriction, DeriveFunctor, ScopedTypeVariables #-}
-module AdamAbstractor.Analysis (
+module SimpleAbstractor.Analysis (
     P(..),
     VarInfo(..),
     Return(..),
@@ -27,9 +27,9 @@ import Data.Bits
 import Safe
 import Data.Tuple.All
 
-import AdamAbstractor.AST as AST
-import AdamAbstractor.Predicate
-import AdamAbstractor.Backend as Backend
+import SimpleAbstractor.AST as AST
+import SimpleAbstractor.Predicate
+import SimpleAbstractor.Backend as Backend
 
 import Synthesis.Interface hiding (VarInfo, NonAbs)
 
